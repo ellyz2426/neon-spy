@@ -1,0 +1,24 @@
+<panel>
+  <div background-color="rgba(0,0,0,0.9)" border-radius="20" padding="14" flex-direction="column" align-items="center" gap="6">
+    <div font-size="18" font-weight="bold" color="#00ffff">HOW TO PLAY</div>
+    <div flex-direction="column" gap="3" align-items="flex-start">
+      <div font-size="10" color="#ffffff">-- Keyboard --</div>
+      <div font-size="9" color="#aaaaaa">Arrow/WASD: Steer left/right</div>
+      <div font-size="9" color="#aaaaaa">Space/F/J: Fire weapons</div>
+      <div font-size="9" color="#aaaaaa">E/Q: Drop oil slick</div>
+      <div font-size="9" color="#aaaaaa">Esc/P: Pause</div>
+      <div font-size="10" color="#ffffff" margin-top="4">-- VR Controller --</div>
+      <div font-size="9" color="#aaaaaa">Thumbstick: Steer</div>
+      <div font-size="9" color="#aaaaaa">Trigger: Fire</div>
+      <div font-size="9" color="#aaaaaa">Grip: Oil slick</div>
+      <div font-size="9" color="#aaaaaa">B: Pause</div>
+      <div font-size="10" color="#ffffff" margin-top="4">-- Tips --</div>
+      <div font-size="9" color="#33ff33">Green cars are civilians - avoid!</div>
+      <div font-size="9" color="#ff4444">Red vehicles are enemies - destroy!</div>
+      <div font-size="9" color="#ffff00">Yellow vans are power-ups - collect!</div>
+      <div font-size="9" color="#aaaaaa">Chain kills for combo multiplier</div>
+      <div font-size="9" color="#aaaaaa">Boss armored trucks every 5 waves</div>
+    </div>
+    <div name="btn-tutorial-back" font-size="11" color="#ffffff" background-color="#555555" border-radius="10" padding-top="5" padding-bottom="5" padding-left="14" padding-right="14" margin-top="4" cursor="pointer">Back</div>
+  </div>
+</panel>

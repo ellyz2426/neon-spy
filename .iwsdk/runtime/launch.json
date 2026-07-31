@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 2,
+  "workspaceRoot": "/home/hatch/workspace/neon-patrol",
+  "pid": 2026,
+  "command": "npm",
+  "args": [
+    "run",
+    "dev:runtime"
+  ],
+  "logPath": "/home/hatch/workspace/neon-patrol/.iwsdk/runtime/logs/dev-1785482482186.log",
+  "scriptName": "dev:runtime",
+  "port": 5173,
+  "openBrowser": false,
+  "createdAt": "2026-07-31T07:21:26.206Z"
+}

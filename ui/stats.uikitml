@@ -1,0 +1,18 @@
+<panel>
+  <div background-color="rgba(0,0,0,0.9)" border-radius="20" padding="14" flex-direction="column" align-items="center" gap="6">
+    <div font-size="18" font-weight="bold" color="#00ffff">CAREER STATS</div>
+    <div flex-direction="column" gap="4" align-items="flex-start">
+      <div name="stat-games" font-size="10" color="#ffffff">Games: 0</div>
+      <div name="stat-score" font-size="10" color="#ffffff">Total Score: 0</div>
+      <div name="stat-best" font-size="10" color="#ffcc00">Best Score: 0</div>
+      <div name="stat-kills" font-size="10" color="#ff4444">Total Kills: 0</div>
+      <div name="stat-distance" font-size="10" color="#aaaaaa">Distance: 0m</div>
+      <div name="stat-powerups" font-size="10" color="#ffff00">Power-Ups: 0</div>
+      <div name="stat-oils" font-size="10" color="#888888">Oil Slicks: 0</div>
+      <div name="stat-bosses" font-size="10" color="#ff00ff">Boss Kills: 0</div>
+      <div name="stat-wave" font-size="10" color="#00ff88">Best Wave: 1</div>
+      <div name="stat-combo" font-size="10" color="#ffaa00">Best Combo: 1x</div>
+    </div>
+    <div name="btn-stats-back" font-size="11" color="#ffffff" background-color="#555555" border-radius="10" padding-top="5" padding-bottom="5" padding-left="14" padding-right="14" margin-top="4" cursor="pointer">Back</div>
+  </div>
+</panel>

@@ -1,0 +1,478 @@
+{
+  "element": {
+    "sourceTag": "panel",
+    "type": "custom",
+    "children": [
+      {
+        "type": "container",
+        "sourceTag": "div",
+        "children": [
+          {
+            "type": "container",
+            "sourceTag": "div",
+            "children": [
+              "HOW TO PLAY"
+            ],
+            "properties": {
+              "fontSize": "18",
+              "fontWeight": "bold",
+              "color": "#00ffff"
+            },
+            "dataUid": "uid-3"
+          },
+          {
+            "type": "container",
+            "sourceTag": "div",
+            "children": [
+              {
+                "type": "container",
+                "sourceTag": "div",
+                "children": [
+                  "-- Keyboard --"
+                ],
+                "properties": {
+                  "fontSize": "10",
+                  "color": "#ffffff"
+                },
+                "dataUid": "uid-5"
+              },
+              {
+                "type": "container",
+                "sourceTag": "div",
+                "children": [
+                  "Arrow/WASD: Steer left/right"
+                ],
+                "properties": {
+                  "fontSize": "9",
+                  "color": "#aaaaaa"
+                },
+                "dataUid": "uid-6"
+              },
+              {
+                "type": "container",
+                "sourceTag": "div",
+                "children": [
+                  "Space/F/J: Fire weapons"
+                ],
+                "properties": {
+                  "fontSize": "9",
+                  "color": "#aaaaaa"
+                },
+                "dataUid": "uid-7"
+              },
+              {
+                "type": "container",
+                "sourceTag": "div",
+                "children": [
+                  "E/Q: Drop oil slick"
+                ],
+                "properties": {
+                  "fontSize": "9",
+                  "color": "#aaaaaa"
+                },
+                "dataUid": "uid-8"
+              },
+              {
+                "type": "container",
+                "sourceTag": "div",
+                "children": [
+                  "Esc/P: Pause"
+                ],
+                "properties": {
+                  "fontSize": "9",
+                  "color": "#aaaaaa"
+                },
+                "dataUid": "uid-9"
+              },
+              {
+                "type": "container",
+                "sourceTag": "div",
+                "children": [
+                  "-- VR Controller --"
+                ],
+                "properties": {
+                  "fontSize": "10",
+                  "color": "#ffffff",
+                  "marginTop": "4"
+                },
+                "dataUid": "uid-10"
+              },
+              {
+                "type": "container",
+                "sourceTag": "div",
+                "children": [
+                  "Thumbstick: Steer"
+                ],
+                "properties": {
+                  "fontSize": "9",
+                  "color": "#aaaaaa"
+                },
+                "dataUid": "uid-11"
+              },
+              {
+                "type": "container",
+                "sourceTag": "div",
+                "children": [
+                  "Trigger: Fire"
+                ],
+                "properties": {
+                  "fontSize": "9",
+                  "color": "#aaaaaa"
+                },
+                "dataUid": "uid-12"
+              },
+              {
+                "type": "container",
+                "sourceTag": "div",
+                "children": [
+                  "Grip: Oil slick"
+                ],
+                "properties": {
+                  "fontSize": "9",
+                  "color": "#aaaaaa"
+                },
+                "dataUid": "uid-13"
+              },
+              {
+                "type": "container",
+                "sourceTag": "div",
+                "children": [
+                  "B: Pause"
+                ],
+                "properties": {
+                  "fontSize": "9",
+                  "color": "#aaaaaa"
+                },
+                "dataUid": "uid-14"
+              },
+              {
+                "type": "container",
+                "sourceTag": "div",
+                "children": [
+                  "-- Tips --"
+                ],
+                "properties": {
+                  "fontSize": "10",
+                  "color": "#ffffff",
+                  "marginTop": "4"
+                },
+                "dataUid": "uid-15"
+              },
+              {
+                "type": "container",
+                "sourceTag": "div",
+                "children": [
+                  "Green cars are civilians - avoid!"
+                ],
+                "properties": {
+                  "fontSize": "9",
+                  "color": "#33ff33"
+                },
+                "dataUid": "uid-16"
+              },
+              {
+                "type": "container",
+                "sourceTag": "div",
+                "children": [
+                  "Red vehicles are enemies - destroy!"
+                ],
+                "properties": {
+                  "fontSize": "9",
+                  "color": "#ff4444"
+                },
+                "dataUid": "uid-17"
+              },
+              {
+                "type": "container",
+                "sourceTag": "div",
+                "children": [
+                  "Yellow vans are power-ups - collect!"
+                ],
+                "properties": {
+                  "fontSize": "9",
+                  "color": "#ffff00"
+                },
+                "dataUid": "uid-18"
+              },
+              {
+                "type": "container",
+                "sourceTag": "div",
+                "children": [
+                  "Chain kills for combo multiplier"
+                ],
+                "properties": {
+                  "fontSize": "9",
+                  "color": "#aaaaaa"
+                },
+                "dataUid": "uid-19"
+              },
+              {
+                "type": "container",
+                "sourceTag": "div",
+                "children": [
+                  "Boss armored trucks every 5 waves"
+                ],
+                "properties": {
+                  "fontSize": "9",
+                  "color": "#aaaaaa"
+                },
+                "dataUid": "uid-20"
+              }
+            ],
+            "properties": {
+              "flexDirection": "column",
+              "gap": "3",
+              "alignItems": "flex-start"
+            },
+            "dataUid": "uid-4"
+          },
+          {
+            "type": "container",
+            "sourceTag": "div",
+            "children": [
+              "Back"
+            ],
+            "properties": {
+              "name": "btn-tutorial-back",
+              "fontSize": "11",
+              "color": "#ffffff",
+              "backgroundColor": "#555555",
+              "borderRadius": "10",
+              "paddingTop": "5",
+              "paddingBottom": "5",
+              "paddingLeft": "14",
+              "paddingRight": "14",
+              "marginTop": "4",
+              "cursor": "pointer"
+            },
+            "dataUid": "uid-21"
+          }
+        ],
+        "properties": {
+          "backgroundColor": "rgba(0,0,0,0.9)",
+          "borderRadius": "20",
+          "padding": "14",
+          "flexDirection": "column",
+          "alignItems": "center",
+          "gap": "6"
+        },
+        "dataUid": "uid-2"
+      }
+    ],
+    "properties": {},
+    "dataUid": "uid-1"
+  },
+  "classes": {},
+  "ranges": {
+    "uid-1": {
+      "start": {
+        "line": 0,
+        "column": 0
+      },
+      "end": {
+        "line": 23,
+        "column": 8
+      }
+    },
+    "uid-2": {
+      "start": {
+        "line": 1,
+        "column": 2
+      },
+      "end": {
+        "line": 22,
+        "column": 8
+      }
+    },
+    "uid-3": {
+      "start": {
+        "line": 2,
+        "column": 4
+      },
+      "end": {
+        "line": 2,
+        "column": 76
+      }
+    },
+    "uid-4": {
+      "start": {
+        "line": 3,
+        "column": 4
+      },
+      "end": {
+        "line": 20,
+        "column": 10
+      }
+    },
+    "uid-5": {
+      "start": {
+        "line": 4,
+        "column": 6
+      },
+      "end": {
+        "line": 4,
+        "column": 62
+      }
+    },
+    "uid-6": {
+      "start": {
+        "line": 5,
+        "column": 6
+      },
+      "end": {
+        "line": 5,
+        "column": 75
+      }
+    },
+    "uid-7": {
+      "start": {
+        "line": 6,
+        "column": 6
+      },
+      "end": {
+        "line": 6,
+        "column": 70
+      }
+    },
+    "uid-8": {
+      "start": {
+        "line": 7,
+        "column": 6
+      },
+      "end": {
+        "line": 7,
+        "column": 66
+      }
+    },
+    "uid-9": {
+      "start": {
+        "line": 8,
+        "column": 6
+      },
+      "end": {
+        "line": 8,
+        "column": 59
+      }
+    },
+    "uid-10": {
+      "start": {
+        "line": 9,
+        "column": 6
+      },
+      "end": {
+        "line": 9,
+        "column": 82
+      }
+    },
+    "uid-11": {
+      "start": {
+        "line": 10,
+        "column": 6
+      },
+      "end": {
+        "line": 10,
+        "column": 64
+      }
+    },
+    "uid-12": {
+      "start": {
+        "line": 11,
+        "column": 6
+      },
+      "end": {
+        "line": 11,
+        "column": 60
+      }
+    },
+    "uid-13": {
+      "start": {
+        "line": 12,
+        "column": 6
+      },
+      "end": {
+        "line": 12,
+        "column": 62
+      }
+    },
+    "uid-14": {
+      "start": {
+        "line": 13,
+        "column": 6
+      },
+      "end": {
+        "line": 13,
+        "column": 55
+      }
+    },
+    "uid-15": {
+      "start": {
+        "line": 14,
+        "column": 6
+      },
+      "end": {
+        "line": 14,
+        "column": 73
+      }
+    },
+    "uid-16": {
+      "start": {
+        "line": 15,
+        "column": 6
+      },
+      "end": {
+        "line": 15,
+        "column": 80
+      }
+    },
+    "uid-17": {
+      "start": {
+        "line": 16,
+        "column": 6
+      },
+      "end": {
+        "line": 16,
+        "column": 82
+      }
+    },
+    "uid-18": {
+      "start": {
+        "line": 17,
+        "column": 6
+      },
+      "end": {
+        "line": 17,
+        "column": 83
+      }
+    },
+    "uid-19": {
+      "start": {
+        "line": 18,
+        "column": 6
+      },
+      "end": {
+        "line": 18,
+        "column": 79
+      }
+    },
+    "uid-20": {
+      "start": {
+        "line": 19,
+        "column": 6
+      },
+      "end": {
+        "line": 19,
+        "column": 80
+      }
+    },
+    "uid-21": {
+      "start": {
+        "line": 21,
+        "column": 4
+      },
+      "end": {
+        "line": 21,
+        "column": 225
+      }
+    }
+  }
+}

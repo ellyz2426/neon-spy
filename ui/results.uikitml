@@ -1,0 +1,15 @@
+<panel>
+  <div background-color="rgba(0,0,0,0.9)" border-radius="20" padding="16" flex-direction="column" align-items="center" gap="8">
+    <div font-size="22" font-weight="bold" color="#ff4444">MISSION OVER</div>
+    <div name="result-best" font-size="11" color="#ffcc00">Best: 0</div>
+    <div name="result-score" font-size="16" font-weight="bold" color="#00ffff">Score: 0</div>
+    <div name="result-wave" font-size="12" color="#ff00ff">Wave: 1</div>
+    <div name="result-kills" font-size="11" color="#aaaaaa">Kills: 0</div>
+    <div name="result-distance" font-size="11" color="#aaaaaa">Distance: 0m</div>
+    <div name="result-combo" font-size="11" color="#ffaa00">Max Combo: 1x</div>
+    <div flex-direction="row" gap="10" margin-top="8">
+      <div name="btn-retry" font-size="14" color="#000000" background-color="#00ffff" border-radius="10" padding-top="8" padding-bottom="8" padding-left="16" padding-right="16" cursor="pointer">Retry</div>
+      <div name="btn-menu" font-size="12" color="#ffffff" background-color="#555555" border-radius="10" padding-top="8" padding-bottom="8" padding-left="16" padding-right="16" cursor="pointer">Menu</div>
+    </div>
+  </div>
+</panel>

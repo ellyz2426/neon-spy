@@ -1,0 +1,36 @@
+
+> neon-patrol@1.0.0 dev:runtime
+> vite
+
+🚀 Generating initial UIKitML files for dev server...
+👁️  UIKitML file watcher started - monitoring for changes...
+
+  VITE v7.3.6  ready in 1402 ms
+
+  ➜  Local:   http://localhost:5173/
+  ➜  Network: http://198.19.0.2:5173/
+🖥️  IWSDK: Using SwiftShader (software rendering) — no GPU detected
+[browser:pageerror] TypeError: Cannot read properties of undefined (reading 'createEntity')
+    at GameSystem.setupPanels (http://localhost:5173/src/game.ts:462:37)
+    at GameSystem.init (http://localhost:5173/src/game.ts:127:10)
+    at World2.registerSystem (http://localhost:5173/node_modules/.vite/deps/chunk-TTD5HGSZ.js?v=ec98ac98:1312:20)
+    at http://localhost:5173/src/main.ts:8:7
+7:20:04 AM [vite] (client) page reload src/game.ts
+7:20:15 AM [vite] (client) page reload src/game.ts
+7:20:21 AM [vite] (client) page reload src/game.ts
+
+🥽 IWSDK Dev Summary (Development):
+  - Device: metaQuest3
+  - Runtime injected: 1120.1KB
+  - Activation mode: localhost
+  - AI: agent mode (WebSocket at /__iwer_mcp)
+  - Note: Runtime only activates on localhost/local networks
+
+
+🥽 IWSDK Dev Summary (Development):
+  - Device: metaQuest3
+  - Runtime injected: 1120.1KB
+  - Activation mode: localhost
+  - AI: agent mode (WebSocket at /__iwer_mcp)
+  - Note: Runtime only activates on localhost/local networks
+

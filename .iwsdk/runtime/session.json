@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 2,
+  "sessionId": "0efd3ba1-500f-4ef1-bd72-25754788f348",
+  "workspaceRoot": "/home/hatch/workspace/neon-patrol",
+  "pid": 2026,
+  "port": 5173,
+  "localUrl": "http://localhost:5173/",
+  "networkUrls": [
+    "http://198.19.0.2:5173/"
+  ],
+  "aiMode": "agent",
+  "browser": {
+    "status": "connected",
+    "connected": true,
+    "commandReady": false,
+    "connectedClientCount": 1,
+    "lastTransitionAt": "2026-07-31T07:22:16.283Z",
+    "lastBridgeConnectedAt": "2026-07-31T07:22:16.283Z",
+    "lastCommandReadyAt": "2026-07-31T07:21:51.387Z"
+  },
+  "registeredAt": "2026-07-31T07:21:24.046Z",
+  "updatedAt": "2026-07-31T07:22:16.295Z"
+}

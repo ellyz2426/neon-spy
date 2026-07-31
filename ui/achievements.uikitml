@@ -1,0 +1,38 @@
+<panel>
+  <div background-color="rgba(0,0,0,0.9)" border-radius="20" padding="14" flex-direction="column" align-items="center" gap="6">
+    <div font-size="18" font-weight="bold" color="#ffcc00">ACHIEVEMENTS</div>
+    <div name="ach-count" font-size="10" color="#aaaaaa">0/30</div>
+    <div flex-direction="column" gap="4" width="100%">
+      <div flex-direction="column" gap="1">
+        <div name="ach-0-name" font-size="10" color="#ffffff"></div>
+        <div name="ach-0-desc" font-size="8" color="#888888"></div>
+      </div>
+      <div flex-direction="column" gap="1">
+        <div name="ach-1-name" font-size="10" color="#ffffff"></div>
+        <div name="ach-1-desc" font-size="8" color="#888888"></div>
+      </div>
+      <div flex-direction="column" gap="1">
+        <div name="ach-2-name" font-size="10" color="#ffffff"></div>
+        <div name="ach-2-desc" font-size="8" color="#888888"></div>
+      </div>
+      <div flex-direction="column" gap="1">
+        <div name="ach-3-name" font-size="10" color="#ffffff"></div>
+        <div name="ach-3-desc" font-size="8" color="#888888"></div>
+      </div>
+      <div flex-direction="column" gap="1">
+        <div name="ach-4-name" font-size="10" color="#ffffff"></div>
+        <div name="ach-4-desc" font-size="8" color="#888888"></div>
+      </div>
+      <div flex-direction="column" gap="1">
+        <div name="ach-5-name" font-size="10" color="#ffffff"></div>
+        <div name="ach-5-desc" font-size="8" color="#888888"></div>
+      </div>
+    </div>
+    <div flex-direction="row" gap="8" align-items="center">
+      <div name="btn-ach-prev" font-size="10" color="#ffffff" background-color="#333333" border-radius="8" padding="4" cursor="pointer">&lt;</div>
+      <div name="ach-page" font-size="10" color="#aaaaaa">1/5</div>
+      <div name="btn-ach-next" font-size="10" color="#ffffff" background-color="#333333" border-radius="8" padding="4" cursor="pointer">&gt;</div>
+    </div>
+    <div name="btn-ach-back" font-size="11" color="#ffffff" background-color="#555555" border-radius="10" padding-top="5" padding-bottom="5" padding-left="14" padding-right="14" cursor="pointer">Back</div>
+  </div>
+</panel>

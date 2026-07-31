@@ -1,0 +1,31 @@
+<panel>
+  <div background-color="rgba(0,0,0,0.85)" border-radius="20" padding="16" flex-direction="column" align-items="center" gap="10">
+    <div font-size="28" font-weight="bold" color="#00ffff">NEON SPY VR</div>
+    <div font-size="12" color="#888888">Spy Hunter Vehicular Combat</div>
+    <div name="high-score" font-size="11" color="#ffcc00">Best: 0</div>
+
+    <div font-size="11" color="#aaaaaa" margin-top="8">-- Mode --</div>
+    <div flex-direction="row" gap="6">
+      <div name="btn-arcade" font-size="10" color="#ffffff" background-color="#00ffff" border-radius="8" padding="6" cursor="pointer">Arcade</div>
+      <div name="btn-speed" font-size="10" color="#ffffff" background-color="#333333" border-radius="8" padding="6" cursor="pointer">Speed</div>
+      <div name="btn-zen" font-size="10" color="#ffffff" background-color="#333333" border-radius="8" padding="6" cursor="pointer">Zen</div>
+      <div name="btn-challenge" font-size="10" color="#ffffff" background-color="#333333" border-radius="8" padding="6" cursor="pointer">Challenge</div>
+    </div>
+
+    <div font-size="11" color="#aaaaaa" margin-top="4">-- Difficulty --</div>
+    <div flex-direction="row" gap="6">
+      <div name="btn-normal" font-size="10" color="#ffffff" background-color="#ff00ff" border-radius="8" padding="6" cursor="pointer">Normal</div>
+      <div name="btn-hard" font-size="10" color="#ffffff" background-color="#333333" border-radius="8" padding="6" cursor="pointer">Hard</div>
+      <div name="btn-insane" font-size="10" color="#ffffff" background-color="#333333" border-radius="8" padding="6" cursor="pointer">Insane</div>
+    </div>
+
+    <div name="btn-start" font-size="16" font-weight="bold" color="#000000" background-color="#00ffff" border-radius="12" padding-top="8" padding-bottom="8" padding-left="24" padding-right="24" margin-top="8" cursor="pointer">START MISSION</div>
+
+    <div flex-direction="row" gap="8" margin-top="6">
+      <div name="btn-settings" font-size="10" color="#aaaaaa" background-color="#222222" border-radius="8" padding="6" cursor="pointer">Settings</div>
+      <div name="btn-achievements" font-size="10" color="#aaaaaa" background-color="#222222" border-radius="8" padding="6" cursor="pointer">Achievements</div>
+      <div name="btn-stats" font-size="10" color="#aaaaaa" background-color="#222222" border-radius="8" padding="6" cursor="pointer">Stats</div>
+      <div name="btn-tutorial" font-size="10" color="#aaaaaa" background-color="#222222" border-radius="8" padding="6" cursor="pointer">How To Play</div>
+    </div>
+  </div>
+</panel>
