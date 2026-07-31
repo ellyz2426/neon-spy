@@ -129,6 +129,40 @@
               "color": "#ffff00"
             },
             "dataUid": "uid-12"
+          },
+          {
+            "type": "container",
+            "sourceTag": "div",
+            "children": [],
+            "properties": {
+              "name": "gadget-status",
+              "fontSize": "9",
+              "color": "#00ccff"
+            },
+            "dataUid": "uid-13"
+          },
+          {
+            "type": "container",
+            "sourceTag": "div",
+            "children": [],
+            "properties": {
+              "name": "mission-text",
+              "fontSize": "9",
+              "fontWeight": "bold",
+              "color": "#00ff88"
+            },
+            "dataUid": "uid-14"
+          },
+          {
+            "type": "container",
+            "sourceTag": "div",
+            "children": [],
+            "properties": {
+              "name": "mission-progress",
+              "fontSize": "8",
+              "color": "#88ffaa"
+            },
+            "dataUid": "uid-15"
           }
         ],
         "properties": {
@@ -153,7 +187,7 @@
         "column": 0
       },
       "end": {
-        "line": 15,
+        "line": 18,
         "column": 8
       }
     },
@@ -163,7 +197,7 @@
         "column": 2
       },
       "end": {
-        "line": 14,
+        "line": 17,
         "column": 8
       }
     },
@@ -265,6 +299,36 @@
       "end": {
         "line": 13,
         "column": 67
+      }
+    },
+    "uid-13": {
+      "start": {
+        "line": 14,
+        "column": 4
+      },
+      "end": {
+        "line": 14,
+        "column": 66
+      }
+    },
+    "uid-14": {
+      "start": {
+        "line": 15,
+        "column": 4
+      },
+      "end": {
+        "line": 15,
+        "column": 84
+      }
+    },
+    "uid-15": {
+      "start": {
+        "line": 16,
+        "column": 4
+      },
+      "end": {
+        "line": 16,
+        "column": 69
       }
     }
   }

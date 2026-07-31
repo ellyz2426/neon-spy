@@ -179,6 +179,84 @@
                   "color": "#00ccff"
                 },
                 "dataUid": "uid-16"
+              },
+              {
+                "type": "container",
+                "sourceTag": "div",
+                "children": [
+                  "Missions Done: 0"
+                ],
+                "properties": {
+                  "name": "stat-missions",
+                  "fontSize": "10",
+                  "color": "#00ff88"
+                },
+                "dataUid": "uid-17"
+              },
+              {
+                "type": "container",
+                "sourceTag": "div",
+                "children": [
+                  "Van Kills: 0"
+                ],
+                "properties": {
+                  "name": "stat-vans",
+                  "fontSize": "10",
+                  "color": "#ff6600"
+                },
+                "dataUid": "uid-18"
+              },
+              {
+                "type": "container",
+                "sourceTag": "div",
+                "children": [
+                  "Interceptor Kills: 0"
+                ],
+                "properties": {
+                  "name": "stat-interceptors",
+                  "fontSize": "10",
+                  "color": "#ff0088"
+                },
+                "dataUid": "uid-19"
+              },
+              {
+                "type": "container",
+                "sourceTag": "div",
+                "children": [
+                  "EMPs Used: 0"
+                ],
+                "properties": {
+                  "name": "stat-emps",
+                  "fontSize": "10",
+                  "color": "#00ccff"
+                },
+                "dataUid": "uid-20"
+              },
+              {
+                "type": "container",
+                "sourceTag": "div",
+                "children": [
+                  "Decoys Deployed: 0"
+                ],
+                "properties": {
+                  "name": "stat-decoys",
+                  "fontSize": "10",
+                  "color": "#00ccff"
+                },
+                "dataUid": "uid-21"
+              },
+              {
+                "type": "container",
+                "sourceTag": "div",
+                "children": [
+                  "Formations Cleared: 0"
+                ],
+                "properties": {
+                  "name": "stat-formations",
+                  "fontSize": "10",
+                  "color": "#ffaa00"
+                },
+                "dataUid": "uid-22"
               }
             ],
             "properties": {
@@ -207,7 +285,7 @@
               "marginTop": "4",
               "cursor": "pointer"
             },
-            "dataUid": "uid-17"
+            "dataUid": "uid-23"
           }
         ],
         "properties": {
@@ -232,7 +310,7 @@
         "column": 0
       },
       "end": {
-        "line": 19,
+        "line": 25,
         "column": 8
       }
     },
@@ -242,7 +320,7 @@
         "column": 2
       },
       "end": {
-        "line": 18,
+        "line": 24,
         "column": 8
       }
     },
@@ -262,7 +340,7 @@
         "column": 4
       },
       "end": {
-        "line": 16,
+        "line": 22,
         "column": 10
       }
     },
@@ -388,11 +466,71 @@
     },
     "uid-17": {
       "start": {
+        "line": 16,
+        "column": 6
+      },
+      "end": {
+        "line": 16,
+        "column": 85
+      }
+    },
+    "uid-18": {
+      "start": {
         "line": 17,
-        "column": 4
+        "column": 6
       },
       "end": {
         "line": 17,
+        "column": 77
+      }
+    },
+    "uid-19": {
+      "start": {
+        "line": 18,
+        "column": 6
+      },
+      "end": {
+        "line": 18,
+        "column": 93
+      }
+    },
+    "uid-20": {
+      "start": {
+        "line": 19,
+        "column": 6
+      },
+      "end": {
+        "line": 19,
+        "column": 77
+      }
+    },
+    "uid-21": {
+      "start": {
+        "line": 20,
+        "column": 6
+      },
+      "end": {
+        "line": 20,
+        "column": 85
+      }
+    },
+    "uid-22": {
+      "start": {
+        "line": 21,
+        "column": 6
+      },
+      "end": {
+        "line": 21,
+        "column": 92
+      }
+    },
+    "uid-23": {
+      "start": {
+        "line": 23,
+        "column": 4
+      },
+      "end": {
+        "line": 23,
         "column": 222
       }
     }

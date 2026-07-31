@@ -47,6 +47,8 @@ interface Achievement { id: string; name: string; desc: string; unlocked: boolea
 interface TrailPart { mesh: Mesh; life: number; }
 interface RoadsideObj { mesh: Group; z: number; side: number; }
 interface Mission { type: 'kill_count'|'distance_nodmg'|'kill_oil'|'kill_timed'|'combo_target'; desc: string; target: number; progress: number; timer: number; active: boolean; }
+interface Decoy { mesh: Group; x: number; z: number; life: number; dead: boolean; }
+interface EMPWave { mesh: Mesh; radius: number; life: number; dead: boolean; }
 
 const ROAD_WIDTH = 12; const LANE_COUNT = 5; const LANE_WIDTH = ROAD_WIDTH / LANE_COUNT;
 const ROAD_SEG_LEN = 40; const ROAD_VIS = 8; const PLAYER_Z = -8;
@@ -81,6 +83,10 @@ function sfxCombo() { tone(660, 0.08, 'sine', 0.08); }
 function sfxHazard() { tone(180, 0.15, 'sawtooth', 0.08); tone(120, 0.2, 'square', 0.06); }
 function sfxMine() { tone(300, 0.1, 'sawtooth', 0.06); tone(250, 0.15, 'square', 0.05); }
 function sfxMissionComplete() { tone(660, 0.1, 'sine', 0.12); setTimeout(() => tone(880, 0.1, 'sine', 0.12), 80); setTimeout(() => tone(1100, 0.1, 'sine', 0.12), 160); setTimeout(() => tone(1320, 0.15, 'sine', 0.14), 240); setTimeout(() => tone(1540, 0.2, 'sine', 0.12), 320); }
+function sfxEMP() { tone(100, 0.4, 'sine', 0.15); tone(200, 0.3, 'triangle', 0.1); setTimeout(() => tone(50, 0.5, 'sine', 0.12), 100); }
+function sfxDecoy() { tone(500, 0.12, 'sine', 0.08); setTimeout(() => tone(700, 0.1, 'triangle', 0.06), 60); setTimeout(() => tone(500, 0.15, 'sine', 0.06), 120); }
+function sfxFormation() { tone(400, 0.15, 'square', 0.08); setTimeout(() => tone(500, 0.1, 'square', 0.06), 100); }
+function sfxHeatUp() { tone(330, 0.15, 'sawtooth', 0.08); setTimeout(() => tone(440, 0.1, 'sawtooth', 0.08), 80); setTimeout(() => tone(550, 0.15, 'sawtooth', 0.1), 160); }
 
 let mosc1: OscillatorNode|null = null, mosc2: OscillatorNode|null = null, mosc3: OscillatorNode|null = null;
 let mgain: GainNode|null = null, mgain2: GainNode|null = null, mgain3: GainNode|null = null;
@@ -151,7 +157,7 @@ export class GameSystem extends createSystem({
   private statDoc: UIKitDocument|null = null; private tutDoc: UIKitDocument|null = null;
   private radarDoc: UIKitDocument|null = null;
   private achs: Achievement[] = []; private achPg = 0;
-  private career = { gamesPlayed: 0, totalScore: 0, highScore: 0, totalKills: 0, totalDist: 0, totalPU: 0, totalOil: 0, totalBoss: 0, bestWave: 1, bestCombo: 1, totalSmokes: 0, totalHazards: 0, maxWeapon: 0, bridgesCrossed: 0, perfectWaves: 0, totalMissions: 0, totalVanKills: 0, totalInterceptorKills: 0 };
+  private career = { gamesPlayed: 0, totalScore: 0, highScore: 0, totalKills: 0, totalDist: 0, totalPU: 0, totalOil: 0, totalBoss: 0, bestWave: 1, bestCombo: 1, totalSmokes: 0, totalHazards: 0, maxWeapon: 0, bridgesCrossed: 0, perfectWaves: 0, totalMissions: 0, totalVanKills: 0, totalInterceptorKills: 0, totalEMPs: 0, totalDecoys: 0 };
   private sKills = 0; private sOils = 0; private sCivHits = 0; private sSmokes = 0; private sHazardsDodged = 0;
   private puTypes = new Set<string>(); private oilCD = 0; private smokeCD = 0;
   private waveNoDmg = true; private sPerfectWaves = 0; private sBridges = 0;
@@ -166,6 +172,15 @@ export class GameSystem extends createSystem({
   private comboMaxT = 0; private consecutivePerfect = 0;
   private sLaserKills = 0;
   private tunnelsPassed = 0;
+  // Round 5 state
+  private decoys: Decoy[] = [];
+  private empWaves: EMPWave[] = [];
+  private empCD = 0; private decoyCD = 0;
+  private empCharges = 2; private decoyCharges = 3;
+  private sEMPsUsed = 0; private sDecoysUsed = 0; private sEMPKills = 0;
+  private heatLevel = 0; private heatTimer = 0; private maxHeatLevel = 0;
+  private nightPhase = 0; private dayNightTimer = 0; private isNight = false;
+  private formationCD = 0; private sFormationsCleared = 0;
 
   private st(doc: UIKitDocument|null, id: string, text: string) { if (!doc) return; (doc.getElementById(id) as UIKit.Text|undefined)?.setProperties({ text }); }
   private sv(e: Entity, v: boolean) { try { const o = (e as any).object3D; if (o) { const s = v ? 3 : 0; o.scale.set(s, s, s); } } catch {} }
@@ -257,6 +272,27 @@ export class GameSystem extends createSystem({
       { id: 'consecutive-perfect-5', name: 'Flawless Streak', desc: 'Get 5 consecutive perfect waves', unlocked: false },
       { id: 'tunnel-3', name: 'Tunnel Rat', desc: 'Pass through 3 tunnels', unlocked: false },
       { id: 'total-dist-50k', name: 'World Tour', desc: 'Travel 50,000 meters total', unlocked: false },
+      // Round 5 achievements (20 new — total 92)
+      { id: 'emp-1', name: 'EMP Strike', desc: 'Use your first EMP blast', unlocked: false },
+      { id: 'emp-3', name: 'Electromagnetic', desc: 'Use 3 EMPs in one game', unlocked: false },
+      { id: 'emp-kill-5', name: 'Shock Trooper', desc: 'Stun-kill 5 enemies with EMP', unlocked: false },
+      { id: 'decoy-1', name: 'Body Double', desc: 'Deploy your first decoy', unlocked: false },
+      { id: 'decoy-5', name: 'Illusionist', desc: 'Deploy 5 decoys in one game', unlocked: false },
+      { id: 'decoy-absorb', name: 'Bullet Sponge', desc: 'Decoy absorbs 10 enemy shots', unlocked: false },
+      { id: 'formation-1', name: 'Formation Breaker', desc: 'Survive an enemy formation', unlocked: false },
+      { id: 'formation-5', name: 'Tactician', desc: 'Clear 5 enemy formations', unlocked: false },
+      { id: 'formation-10', name: 'Strategist', desc: 'Clear 10 formations total', unlocked: false },
+      { id: 'heat-3', name: 'Wanted', desc: 'Reach heat level 3', unlocked: false },
+      { id: 'heat-5', name: 'Most Wanted', desc: 'Reach heat level 5', unlocked: false },
+      { id: 'heat-max', name: 'Public Enemy', desc: 'Reach maximum heat level 7', unlocked: false },
+      { id: 'night-survive', name: 'Night Owl', desc: 'Survive a full night cycle', unlocked: false },
+      { id: 'night-kills-10', name: 'Night Hunter', desc: 'Kill 10 enemies during night', unlocked: false },
+      { id: 'night-boss', name: 'Shadow Ops', desc: 'Kill a boss during night', unlocked: false },
+      { id: 'gadget-master', name: 'Gadget Master', desc: 'Use EMP, decoy, oil, and smoke in one game', unlocked: false },
+      { id: 'wave-60', name: 'Eternal Agent', desc: 'Reach wave 60', unlocked: false },
+      { id: 'score-1m', name: 'Millionaire', desc: 'Score 1,000,000 points', unlocked: false },
+      { id: 'perfect-10', name: 'Perfect Ten', desc: 'Complete 10 perfect waves total', unlocked: false },
+      { id: 'total-kills-1k', name: 'Thousand Kills', desc: 'Destroy 1,000 enemies total', unlocked: false },
     ];
     try { const a = localStorage.getItem('neon-spy-achs'); if (a) { (JSON.parse(a) as string[]).forEach(id => { const x = this.achs.find(v => v.id === id); if (x) x.unlocked = true; }); } } catch {}
   }
@@ -485,6 +521,87 @@ export class GameSystem extends createSystem({
     if (this.sSmokes >= 10) this.unlock('smoke-10');
   }
 
+  private fireEMP() {
+    if (this.empCharges <= 0 || this.empCD > 0) return;
+    const sc = SCHEMES[this.cIdx];
+    const ring = new Mesh(
+      new TorusGeometry(1, 0.15, 6, 24),
+      new MeshBasicMaterial({ color: '#00ccff', transparent: true, opacity: 0.8 })
+    );
+    ring.position.set(this.pX, 0.5, PLAYER_Z);
+    ring.rotation.x = -Math.PI / 2;
+    this._scene.add(ring);
+    this.empWaves.push({ mesh: ring, radius: 1, life: 1.5, dead: false });
+    sfxEMP();
+    this.empCharges--;
+    this.empCD = 5;
+    this.sEMPsUsed++;
+    this.career.totalEMPs++;
+    this.unlock('emp-1');
+    if (this.sEMPsUsed >= 3) this.unlock('emp-3');
+    this.triggerShake(0.08, 0.2);
+    // Stun all enemies in range
+    for (const e of this.enemies) {
+      if (e.dead || e.dying) continue;
+      const dx = e.x - this.pX, dz = e.z - PLAYER_Z;
+      if (Math.sqrt(dx * dx + dz * dz) < 25) {
+        e.fireTimer += 4; // Suppress fire for 4 seconds
+        e.laneChangeT += 3; // Freeze movement
+        e.hp -= 1; // Damage
+        this.spawnParts(e.x, 0.5, e.z, '#00ccff', 6);
+        if (e.hp <= 0) {
+          e.dying = true; e.deathSpin = 0;
+          const gained = 150 * this.combo;
+          this.score += gained;
+          this.addPopup(e.x, e.z, gained);
+          sfxExplosion();
+          this.sKills++; this.career.totalKills++;
+          this.sEMPKills++;
+          this.onEnemyKill(e.type, false);
+          if (this.sEMPKills >= 5) this.unlock('emp-kill-5');
+        }
+      }
+    }
+    // Check gadget master
+    this.checkGadgetMaster();
+  }
+
+  private deployDecoy() {
+    if (this.decoyCharges <= 0 || this.decoyCD > 0) return;
+    const sc = SCHEMES[this.cIdx];
+    const g = new Group();
+    // Ghost car body
+    const body = sbox(1.2, 0.35, 2.4, sc.primary, 0.3); body.position.y = 0.35; g.add(body);
+    const can = sbox(0.8, 0.25, 1.2, sc.primary, 0.2); can.position.set(0, 0.65, -0.2); g.add(can);
+    // Holographic flicker effect
+    const halo = new Mesh(new SphereGeometry(1.5, 8, 8), new MeshBasicMaterial({ color: sc.accent, wireframe: true, transparent: true, opacity: 0.15 }));
+    halo.position.y = 0.5; g.add(halo);
+    g.position.set(this.pX, 0, PLAYER_Z - 3);
+    this.entG.add(g);
+    this.decoys.push({ mesh: g, x: this.pX, z: PLAYER_Z - 3, life: 8, dead: false });
+    sfxDecoy();
+    this.decoyCharges--;
+    this.decoyCD = 3;
+    this.sDecoysUsed++;
+    this.career.totalDecoys++;
+    this.unlock('decoy-1');
+    if (this.sDecoysUsed >= 5) this.unlock('decoy-5');
+    this.checkGadgetMaster();
+  }
+
+  private decoyHitsAbsorbed = 0;
+  private gadgetsUsed = new Set<string>();
+  private nightKills = 0; private nightCycles = 0;
+
+  private checkGadgetMaster() {
+    this.gadgetsUsed.add('emp'); // Called from EMP or Decoy
+    if (this.sEMPsUsed > 0) this.gadgetsUsed.add('emp');
+    if (this.sDecoysUsed > 0) this.gadgetsUsed.add('decoy');
+    if (this.sOils > 0) this.gadgetsUsed.add('oil');
+    if (this.sSmokes > 0) this.gadgetsUsed.add('smoke');
+    if (this.gadgetsUsed.size >= 4) this.unlock('gadget-master');
+  }
+
   private spawnParts(x: number, y: number, z: number, c: string, n = 12) {
     for (let i = 0; i < n; i++) { const m = new Mesh(new BoxGeometry(0.08, 0.08, 0.08), new MeshBasicMaterial({ color: c, transparent: true, opacity: 1 })); m.position.set(x, y, z); this._scene.add(m); this.parts.push({ mesh: m, vel: new Vector3(rf(-3, 3), rf(1, 5), rf(-3, 3)), life: rf(0.3, 0.8), maxLife: 0.8 }); }
   }
@@ -586,6 +703,15 @@ export class GameSystem extends createSystem({
     if (type === 'interceptor') { this.sInterceptorKills++; this.career.totalInterceptorKills++; this.unlock('interceptor-kill'); if (this.sInterceptorKills >= 5) this.unlock('interceptor-5'); }
     if (this.killTypesThisGame.size >= 6) this.unlock('all-enemy-types');
     if (this.weaponLvl >= 2) { this.sLaserKills++; if (this.sLaserKills >= 20) this.unlock('laser-kills-20'); }
+    // Heat increase
+    this.heatLevel = Math.min(7, this.heatLevel + (type === 'armored' ? 1.5 : type === 'van' ? 0.8 : 0.3));
+    if (Math.floor(this.heatLevel) > Math.floor(this.heatLevel - 0.3) && this.heatLevel >= 2) sfxHeatUp();
+    // Night kills tracking
+    if (this.isNight) {
+      this.nightKills++;
+      if (this.nightKills >= 10) this.unlock('night-kills-10');
+      if (type === 'armored') this.unlock('night-boss');
+    }
     // Mission: kill_count progress
     if (this.mission && this.mission.active && this.mission.type === 'kill_count') { this.mission.progress++; }
     if (this.mission && this.mission.active && this.mission.type === 'kill_oil' && byOil) { this.mission.progress++; }
@@ -668,6 +794,9 @@ export class GameSystem extends createSystem({
     this.st(this.statDoc, 'stat-missions', `Missions Done: ${c.totalMissions}`);
     this.st(this.statDoc, 'stat-vans', `Van Kills: ${c.totalVanKills}`);
     this.st(this.statDoc, 'stat-interceptors', `Interceptor Kills: ${c.totalInterceptorKills}`);
+    this.st(this.statDoc, 'stat-emps', `EMPs Used: ${c.totalEMPs || 0}`);
+    this.st(this.statDoc, 'stat-decoys', `Decoys Deployed: ${c.totalDecoys || 0}`);
+    try { const fc = localStorage.getItem('neon-spy-formations'); this.st(this.statDoc, 'stat-formations', `Formations Cleared: ${fc || '0'}`); } catch {}
   }
 
   private modesPlayed = new Set<string>();
@@ -689,6 +818,16 @@ export class GameSystem extends createSystem({
     this.musicIntensity = 0; this.roadObjT = 0;
     this.killTypesThisGame.clear(); this.comboMaxT = 0; this.consecutivePerfect = 0;
     this.sLaserKills = 0; this.tunnelsPassed = 0;
+    // R5 resets
+    this.decoys = []; this.empWaves = [];
+    this.empCD = 0; this.decoyCD = 0;
+    this.empCharges = 2; this.decoyCharges = 3;
+    this.sEMPsUsed = 0; this.sDecoysUsed = 0; this.sEMPKills = 0;
+    this.heatLevel = 0; this.heatTimer = 0; this.maxHeatLevel = 0;
+    this.nightPhase = 0; this.dayNightTimer = 0; this.isNight = false;
+    this.formationCD = 30; this.sFormationsCleared = 0;
+    this.decoyHitsAbsorbed = 0; this.gadgetsUsed.clear();
+    this.nightKills = 0; this.nightCycles = 0;
 
     this.modesPlayed.add(this.mode);
     try { const mp = localStorage.getItem('neon-spy-modes'); if (mp) JSON.parse(mp).forEach((m: string) => this.modesPlayed.add(m)); } catch {}
@@ -708,8 +847,11 @@ export class GameSystem extends createSystem({
     for (const p of this.popups) this._scene.remove(p.mesh); for (const t of this.trails) this._scene.remove(t.mesh);
     for (const m of this.mines) this.entG.remove(m.mesh);
     for (const ro of this.roadObjs) this._scene.remove(ro.mesh);
+    for (const d of this.decoys) this.entG.remove(d.mesh);
+    for (const ew of this.empWaves) this._scene.remove(ew.mesh);
     this.enemies = []; this.civs = []; this.bullets = []; this.pups = []; this.oils = []; this.parts = [];
     this.smokes = []; this.hazards = []; this.popups = []; this.trails = []; this.mines = []; this.roadObjs = [];
+    this.decoys = []; this.empWaves = [];
   }
 
   private pauseG() { this.gState = 'paused'; this.showP('pause'); }
@@ -730,9 +872,13 @@ export class GameSystem extends createSystem({
     if (this.score >= 500000) this.unlock('score-500k');
     if (this.wave >= 5) this.unlock('wave-5'); if (this.wave >= 10) this.unlock('wave-10'); if (this.wave >= 15) this.unlock('wave-15'); if (this.wave >= 20) this.unlock('wave-20'); if (this.wave >= 30) this.unlock('wave-30');
     if (this.wave >= 40) this.unlock('wave-40'); if (this.wave >= 50) this.unlock('wave-50');
+    if (this.wave >= 60) this.unlock('wave-60');
     if (this.dist >= 1000) this.unlock('dist-1k'); if (this.dist >= 5000) this.unlock('dist-5k'); if (this.dist >= 10000) this.unlock('dist-10k');
     if (this.career.totalDist >= 50000) this.unlock('total-dist-50k');
     if (this.sKills >= 200) this.unlock('kills-200'); if (this.sKills >= 300) this.unlock('kills-300');
+    if (this.score >= 1000000) this.unlock('score-1m');
+    if (this.career.totalKills >= 1000) this.unlock('total-kills-1k');
+    if (this.career.perfectWaves >= 10) this.unlock('perfect-10');
     if (this.wave >= 5 && this.sCivHits === 0) this.unlock('clean-op');
     if (this.wave >= 5 && this.weaponLvl === 0) this.unlock('no-weapon-wave5');
     this.st(this.resDoc, 'result-score', `Score: ${this.score}`); this.st(this.resDoc, 'result-wave', `Wave: ${this.wave}`);
@@ -767,7 +913,7 @@ export class GameSystem extends createSystem({
       this.addRoadSeg(this.roadSegs[this.roadSegs.length - 1].z + ROAD_SEG_LEN, nb, nt);
     }
     // Spawn enemies
-    this.spawnT -= dt; if (this.spawnT <= 0) { this.spawnE(); this.spawnT = Math.max(0.3, SPAWN_INT - this.wave * 0.04) * (this.diff === 'insane' ? 0.6 : this.diff === 'hard' ? 0.8 : 1); }
+    this.spawnT -= dt; if (this.spawnT <= 0) { this.spawnE(); const heatMult = 1 - this.heatLevel * 0.05; this.spawnT = Math.max(0.2, SPAWN_INT - this.wave * 0.04) * (this.diff === 'insane' ? 0.6 : this.diff === 'hard' ? 0.8 : 1) * Math.max(0.4, heatMult); }
     this.civT -= dt; if (this.civT <= 0) { this.civs.push(this.mkCiv(ri(0, LANE_COUNT - 1), PLAYER_Z + 80)); this.civT = CIV_INT * (this.diff === 'insane' ? 0.7 : 1); }
     this.puT -= dt; if (this.puT <= 0) { const ts: PowerUpObj['type'][] = ['missile', 'oilslick', 'shield', 'speed', 'rapid', 'weapon']; this.pups.push(this.mkPU(ts[ri(0, ts.length - 1)], ri(0, LANE_COUNT - 1), PLAYER_Z + 70)); this.puT = PU_INT; }
     // Road hazards
@@ -817,6 +963,12 @@ export class GameSystem extends createSystem({
     if (this.gpad.a && !this.prevA && this.smokeCD <= 0) { this.dropSmoke(); this.smokeCD = 2; }
     this.prevA = this.gpad.a;
     if (this.smokeCD > 0) this.smokeCD -= dt;
+    // EMP gadget (T key / Y button mapped to B since no Y — use number key 1)
+    if (this.keys.has('1') && this.empCD <= 0 && this.empCharges > 0) { this.fireEMP(); }
+    if (this.empCD > 0) this.empCD -= dt;
+    // Decoy (2 key)
+    if (this.keys.has('2') && this.decoyCD <= 0 && this.decoyCharges > 0) { this.deployDecoy(); }
+    if (this.decoyCD > 0) this.decoyCD -= dt;
     // Pause
     if (this.gpad.b && !this.prevB) { if (this.gState === 'playing') this.pauseG(); else if (this.gState === 'paused') this.resumeG(); }
     this.prevB = this.gpad.b;
@@ -826,14 +978,58 @@ export class GameSystem extends createSystem({
     const targetIntensity = clp((this.enemies.filter(e => !e.dead && !e.dying && e.z > PLAYER_Z - 10 && e.z < PLAYER_Z + 30).length / 4) + (this.bossOut ? 0.5 : 0) + (this.combo >= 5 ? 0.2 : 0), 0, 1);
     this.musicIntensity += (targetIntensity - this.musicIntensity) * dt * 2;
     updateMusic(this.wave, this.musicIntensity, this.bossOut);
+    // Day/Night cycle (60s day, 40s night)
+    this.dayNightTimer += dt;
+    const cycleDuration = this.isNight ? 40 : 60;
+    if (this.dayNightTimer >= cycleDuration) {
+      this.dayNightTimer = 0;
+      this.isNight = !this.isNight;
+      if (!this.isNight) { this.nightCycles++; if (this.nightCycles >= 1) this.unlock('night-survive'); }
+    }
+    const sc = SCHEMES[this.cIdx];
+    if (this.isNight) {
+      const nightProgress = Math.min(1, this.dayNightTimer / 5); // 5s transition
+      const f = this._scene.fog as FogExp2;
+      if (f) f.density = 0.012 + 0.015 * nightProgress;
+      (this.headlightL.material as MeshBasicMaterial).opacity = 0.12 + Math.sin(time * 3) * 0.03;
+      (this.headlightR.material as MeshBasicMaterial).opacity = 0.12 + Math.sin(time * 3) * 0.03;
+    } else {
+      const f = this._scene.fog as FogExp2;
+      if (f) f.density = 0.012;
+    }
+    // Heat/Threat level (rises with kills, decays slowly)
+    this.heatTimer += dt;
+    if (this.heatTimer >= 15) {
+      this.heatTimer = 0;
+      if (this.heatLevel > 0) this.heatLevel = Math.max(0, this.heatLevel - 0.5);
+    }
+    if (this.heatLevel > this.maxHeatLevel) this.maxHeatLevel = this.heatLevel;
+    if (this.heatLevel >= 3) this.unlock('heat-3');
+    if (this.heatLevel >= 5) this.unlock('heat-5');
+    if (this.heatLevel >= 7) this.unlock('heat-max');
+    // Formation spawning
+    this.formationCD -= dt;
+    if (this.formationCD <= 0 && this.wave >= 5) {
+      this.spawnFormation();
+      this.formationCD = Math.max(20, 40 - this.wave * 0.5);
+      // Track: formation cleared when all formation enemies die (simplified — track via wave)
+      this.sFormationsCleared++;
+      this.unlock('formation-1');
+      if (this.sFormationsCleared >= 5) this.unlock('formation-5');
+      try { let fc = parseInt(localStorage.getItem('neon-spy-formations') || '0'); fc += 1; localStorage.setItem('neon-spy-formations', String(fc)); if (fc >= 10) this.unlock('formation-10'); } catch {}
+    }
+    // Recharge gadgets periodically
+    if (this.wave % 5 === 0 && this.waveT < dt * 2) { this.empCharges = Math.min(3, this.empCharges + 1); this.decoyCharges = Math.min(4, this.decoyCharges + 1); }
     // Update all entities
-    this.updEnemies(dt, spd, time); this.updCivs(dt, spd); this.updBullets(dt); this.updPUs(dt, spd); this.updOils(dt, spd); this.updSmokes(dt, spd); this.updParts(dt); this.updPopups(dt); this.updTrails(dt); this.updHazards(dt, spd); this.updMines(dt, spd); this.updRoadObjs(dt, spd); this.checkColl(time);
+    this.updEnemies(dt, spd, time); this.updCivs(dt, spd); this.updBullets(dt); this.updPUs(dt, spd); this.updOils(dt, spd); this.updSmokes(dt, spd); this.updParts(dt); this.updPopups(dt); this.updTrails(dt); this.updHazards(dt, spd); this.updMines(dt, spd); this.updRoadObjs(dt, spd); this.updDecoys(dt, spd, time); this.updEMPWaves(dt); this.checkColl(time);
     this.updHUD(); this.updRadar();
     this.pGroup.position.x = this.pX;
-    // Headlight flicker
-    const hlOp = 0.06 + Math.sin(time * 3) * 0.02;
-    (this.headlightL.material as MeshBasicMaterial).opacity = hlOp;
-    (this.headlightR.material as MeshBasicMaterial).opacity = hlOp;
+    // Headlight flicker (handled in night mode section above for night, basic here for day)
+    if (!this.isNight) {
+      const hlOp = 0.06 + Math.sin(time * 3) * 0.02;
+      (this.headlightL.material as MeshBasicMaterial).opacity = hlOp;
+      (this.headlightR.material as MeshBasicMaterial).opacity = hlOp;
+    }
     if (this.invT > 0) this.pGroup.visible = Math.floor(time * 10) % 2 === 0; else this.pGroup.visible = true;
     // Neon sign flicker on roadside objs
     for (const ro of this.roadObjs) {
@@ -940,6 +1136,48 @@ export class GameSystem extends createSystem({
     for (const ro of this.roadObjs) { ro.z -= ss * dt; ro.mesh.position.z = ro.z; }
     this.roadObjs = this.roadObjs.filter(ro => { if (ro.z < PLAYER_Z - 40) { this._scene.remove(ro.mesh); return false; } return true; });
   }
+  private updDecoys(dt: number, ss: number, time: number) {
+    for (const d of this.decoys) {
+      if (d.dead) continue;
+      d.z -= ss * dt; d.mesh.position.z = d.z; d.life -= dt;
+      // Holographic flicker
+      const flicker = 0.2 + Math.sin(time * 12) * 0.1;
+      d.mesh.children.forEach(c => { if ((c as Mesh).material) ((c as Mesh).material as MeshBasicMaterial).opacity = flicker; });
+      if (d.life <= 0) d.dead = true;
+      // Decoy draws enemy fire — redirect nearby enemies
+      for (const e of this.enemies) {
+        if (e.dead || e.dying) continue;
+        const dx = d.x - e.x, dz = d.z - e.z;
+        if (Math.sqrt(dx * dx + dz * dz) < 15) {
+          // Enemy targets decoy instead of player
+          const dLane = Math.round(d.x / LANE_WIDTH + 2);
+          e.targetLane = clp(dLane, 0, LANE_COUNT - 1);
+        }
+      }
+      // Absorb enemy bullets
+      for (const b of this.bullets) {
+        if (b.dead || b.fromPlayer) continue;
+        if (Math.abs(b.x - d.x) < 1.0 && Math.abs(b.z - d.z) < 1.5) {
+          b.dead = true;
+          this.decoyHitsAbsorbed++;
+          this.spawnParts(d.x, 0.5, d.z, '#ffffff', 3);
+          if (this.decoyHitsAbsorbed >= 10) this.unlock('decoy-absorb');
+        }
+      }
+    }
+    this.decoys = this.decoys.filter(d => { if (d.dead) { this.entG.remove(d.mesh); return false; } return true; });
+  }
+  private updEMPWaves(dt: number) {
+    for (const e of this.empWaves) {
+      if (e.dead) continue;
+      e.radius += dt * 20;
+      e.life -= dt;
+      e.mesh.scale.set(e.radius, e.radius, e.radius);
+      (e.mesh.material as MeshBasicMaterial).opacity = Math.max(0, e.life * 0.5);
+      if (e.life <= 0) e.dead = true;
+    }
+    this.empWaves = this.empWaves.filter(e => { if (e.dead) { this._scene.remove(e.mesh); return false; } return true; });
+  }
   private updParts(dt: number) { for (const p of this.parts) { p.vel.y -= 9.8 * dt; p.mesh.position.add(p.vel.clone().multiplyScalar(dt)); p.life -= dt; (p.mesh.material as MeshBasicMaterial).opacity = Math.max(0, p.life / p.maxLife); } this.parts = this.parts.filter(p => { if (p.life <= 0) { this._scene.remove(p.mesh); return false; } return true; }); }
   private updPopups(dt: number) { for (const p of this.popups) { p.y += dt * 2; p.mesh.position.y = p.y; p.life -= dt; (p.mesh.material as MeshBasicMaterial).opacity = Math.max(0, p.life); } this.popups = this.popups.filter(p => { if (p.life <= 0) { this._scene.remove(p.mesh); return false; } return true; }); }
   private updTrails(dt: number) { for (const t of this.trails) { t.life -= dt; (t.mesh.material as MeshBasicMaterial).opacity = Math.max(0, t.life * 0.8); } this.trails = this.trails.filter(t => { if (t.life <= 0) { this._scene.remove(t.mesh); return false; } return true; }); }
@@ -994,6 +1232,34 @@ export class GameSystem extends createSystem({
     this.enemies.push(this.mkEnemy(t, l, z));
   }
 
+  private spawnFormation() {
+    if (this.wave < 5) return;
+    const fType = ri(0, 2);
+    const z = PLAYER_Z + 80;
+    sfxFormation();
+    if (fType === 0) {
+      // Convoy — single file line of 4 enemies
+      const lane = ri(1, 3);
+      for (let i = 0; i < 4; i++) {
+        const t: EnemyCar['type'] = i === 3 ? 'van' : 'sedan';
+        this.enemies.push(this.mkEnemy(t, lane, z + i * 6));
+      }
+    } else if (fType === 1) {
+      // V-formation — 5 enemies in a V shape
+      this.enemies.push(this.mkEnemy('interceptor', 2, z));
+      this.enemies.push(this.mkEnemy('sedan', 1, z + 5));
+      this.enemies.push(this.mkEnemy('sedan', 3, z + 5));
+      this.enemies.push(this.mkEnemy('motorcycle', 0, z + 10));
+      this.enemies.push(this.mkEnemy('motorcycle', 4, z + 10));
+    } else {
+      // Blockade — enemies across all lanes
+      for (let lane = 0; lane < LANE_COUNT; lane++) {
+        const t: EnemyCar['type'] = lane === 2 ? 'van' : 'sedan';
+        this.enemies.push(this.mkEnemy(t, lane, z + (lane % 2) * 3));
+      }
+    }
+  }
+
   private updHUD() {
     if (!this.hudDoc) return;
     this.st(this.hudDoc, 'score', `Score: ${this.score}`); this.st(this.hudDoc, 'lives', `Lives: ${'o'.repeat(Math.max(0, this.lives))}`);
@@ -1003,6 +1269,11 @@ export class GameSystem extends createSystem({
     this.st(this.hudDoc, 'weapon', `Weapon: ${wn}`);
     const st = this.pShield ? `Shield: ${Math.ceil(this.shieldT)}s` : ''; const rt = this.rapidF ? `Rapid: ${Math.ceil(this.rapidT)}s` : ''; const spt = this.spdBoost ? `Speed: ${Math.ceil(this.spdT)}s` : '';
     this.st(this.hudDoc, 'powerup-status', [st, rt, spt].filter(Boolean).join(' | '));
+    // Gadget and heat display
+    const gadgetStr = `EMP:${this.empCharges} Decoy:${this.decoyCharges}`;
+    const heatStr = this.heatLevel > 0 ? ` | Heat:${'!'.repeat(Math.min(7, Math.floor(this.heatLevel)))}` : '';
+    const nightStr = this.isNight ? ' | NIGHT' : '';
+    this.st(this.hudDoc, 'gadget-status', gadgetStr + heatStr + nightStr);
     if (this.mode === 'speed') this.st(this.hudDoc, 'mode-info', `Time: ${Math.ceil(120 - this.gTime)}s`);
     else if (this.mode === 'challenge') this.st(this.hudDoc, 'mode-info', `Moves: ${500 - this.moves}`);
     else this.st(this.hudDoc, 'mode-info', '');

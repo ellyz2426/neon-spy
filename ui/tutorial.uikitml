@@ -7,6 +7,8 @@
       <div font-size="9" color="#aaaaaa">Space/F/J: Fire weapons</div>
       <div font-size="9" color="#aaaaaa">E/Q: Drop oil slick</div>
       <div font-size="9" color="#aaaaaa">R: Deploy smoke screen</div>
+      <div font-size="9" color="#00ccff">1: Fire EMP blast (stuns enemies)</div>
+      <div font-size="9" color="#00ccff">2: Deploy holographic decoy</div>
       <div font-size="9" color="#aaaaaa">Esc/P: Pause</div>
       <div font-size="10" color="#ffffff" margin-top="4">-- VR Controller --</div>
       <div font-size="9" color="#aaaaaa">Thumbstick: Steer</div>
@@ -28,6 +30,11 @@
       <div font-size="9" color="#00ff88">Complete bonus missions for points</div>
       <div font-size="9" color="#aaaaaa">Weapons: Dual - Spread - Laser</div>
       <div font-size="9" color="#aaaaaa">Smoke screens block enemy fire</div>
+      <div font-size="9" color="#00ccff">EMP stuns + damages all nearby enemies</div>
+      <div font-size="9" color="#00ccff">Decoys draw enemy fire away from you</div>
+      <div font-size="9" color="#ffaa00">Heat level rises with kills — more enemies!</div>
+      <div font-size="9" color="#6666ff">Day/Night cycle — night reduces visibility</div>
+      <div font-size="9" color="#ff4444">Enemy formations appear at wave 5+</div>
       <div font-size="9" color="#aaaaaa">Watch the radar for threats!</div>
       <div font-size="9" color="#aaaaaa">Chain kills for combo multiplier</div>
     </div>

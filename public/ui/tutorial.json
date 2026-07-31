@@ -88,13 +88,37 @@
                 "type": "container",
                 "sourceTag": "div",
                 "children": [
+                  "1: Fire EMP blast (stuns enemies)"
+                ],
+                "properties": {
+                  "fontSize": "9",
+                  "color": "#00ccff"
+                },
+                "dataUid": "uid-10"
+              },
+              {
+                "type": "container",
+                "sourceTag": "div",
+                "children": [
+                  "2: Deploy holographic decoy"
+                ],
+                "properties": {
+                  "fontSize": "9",
+                  "color": "#00ccff"
+                },
+                "dataUid": "uid-11"
+              },
+              {
+                "type": "container",
+                "sourceTag": "div",
+                "children": [
                   "Esc/P: Pause"
                 ],
                 "properties": {
                   "fontSize": "9",
                   "color": "#aaaaaa"
                 },
-                "dataUid": "uid-10"
+                "dataUid": "uid-12"
               },
               {
                 "type": "container",
@@ -107,7 +131,7 @@
                   "color": "#ffffff",
                   "marginTop": "4"
                 },
-                "dataUid": "uid-11"
+                "dataUid": "uid-13"
               },
               {
                 "type": "container",
@@ -119,7 +143,7 @@
                   "fontSize": "9",
                   "color": "#aaaaaa"
                 },
-                "dataUid": "uid-12"
+                "dataUid": "uid-14"
               },
               {
                 "type": "container",
@@ -131,7 +155,7 @@
                   "fontSize": "9",
                   "color": "#aaaaaa"
                 },
-                "dataUid": "uid-13"
+                "dataUid": "uid-15"
               },
               {
                 "type": "container",
@@ -143,7 +167,7 @@
                   "fontSize": "9",
                   "color": "#aaaaaa"
                 },
-                "dataUid": "uid-14"
+                "dataUid": "uid-16"
               },
               {
                 "type": "container",
@@ -155,7 +179,7 @@
                   "fontSize": "9",
                   "color": "#aaaaaa"
                 },
-                "dataUid": "uid-15"
+                "dataUid": "uid-17"
               },
               {
                 "type": "container",
@@ -167,7 +191,92 @@
                   "fontSize": "9",
                   "color": "#aaaaaa"
                 },
-                "dataUid": "uid-16"
+                "dataUid": "uid-18"
+              },
+              {
+                "type": "container",
+                "sourceTag": "div",
+                "children": [
+                  "-- Enemies --"
+                ],
+                "properties": {
+                  "fontSize": "10",
+                  "color": "#ffffff",
+                  "marginTop": "4"
+                },
+                "dataUid": "uid-19"
+              },
+              {
+                "type": "container",
+                "sourceTag": "div",
+                "children": [
+                  "Sedans: Standard enemies"
+                ],
+                "properties": {
+                  "fontSize": "9",
+                  "color": "#ff4444"
+                },
+                "dataUid": "uid-20"
+              },
+              {
+                "type": "container",
+                "sourceTag": "div",
+                "children": [
+                  "Motorcycles: Fast, no guns"
+                ],
+                "properties": {
+                  "fontSize": "9",
+                  "color": "#ff4444"
+                },
+                "dataUid": "uid-21"
+              },
+              {
+                "type": "container",
+                "sourceTag": "div",
+                "children": [
+                  "Helicopters: Fly above, 2 HP"
+                ],
+                "properties": {
+                  "fontSize": "9",
+                  "color": "#ff4444"
+                },
+                "dataUid": "uid-22"
+              },
+              {
+                "type": "container",
+                "sourceTag": "div",
+                "children": [
+                  "Vans: Drop mines behind them"
+                ],
+                "properties": {
+                  "fontSize": "9",
+                  "color": "#ff6600"
+                },
+                "dataUid": "uid-23"
+              },
+              {
+                "type": "container",
+                "sourceTag": "div",
+                "children": [
+                  "Interceptors: Fast flankers"
+                ],
+                "properties": {
+                  "fontSize": "9",
+                  "color": "#ff0088"
+                },
+                "dataUid": "uid-24"
+              },
+              {
+                "type": "container",
+                "sourceTag": "div",
+                "children": [
+                  "Armored Boss: Every 5 waves"
+                ],
+                "properties": {
+                  "fontSize": "9",
+                  "color": "#ff4444"
+                },
+                "dataUid": "uid-25"
               },
               {
                 "type": "container",
@@ -180,7 +289,7 @@
                   "color": "#ffffff",
                   "marginTop": "4"
                 },
-                "dataUid": "uid-17"
+                "dataUid": "uid-26"
               },
               {
                 "type": "container",
@@ -192,43 +301,43 @@
                   "fontSize": "9",
                   "color": "#33ff33"
                 },
-                "dataUid": "uid-18"
+                "dataUid": "uid-27"
               },
               {
                 "type": "container",
                 "sourceTag": "div",
                 "children": [
-                  "Red vehicles are enemies - destroy!"
-                ],
-                "properties": {
-                  "fontSize": "9",
-                  "color": "#ff4444"
-                },
-                "dataUid": "uid-19"
-              },
-              {
-                "type": "container",
-                "sourceTag": "div",
-                "children": [
-                  "Yellow vans are power-ups - collect!"
+                  "Collect power-ups for upgrades"
                 ],
                 "properties": {
                   "fontSize": "9",
                   "color": "#ffff00"
                 },
-                "dataUid": "uid-20"
+                "dataUid": "uid-28"
               },
               {
                 "type": "container",
                 "sourceTag": "div",
                 "children": [
-                  "Purple crates upgrade your weapon!"
+                  "Purple crates upgrade weapons"
                 ],
                 "properties": {
                   "fontSize": "9",
                   "color": "#ff00ff"
                 },
-                "dataUid": "uid-21"
+                "dataUid": "uid-29"
+              },
+              {
+                "type": "container",
+                "sourceTag": "div",
+                "children": [
+                  "Complete bonus missions for points"
+                ],
+                "properties": {
+                  "fontSize": "9",
+                  "color": "#00ff88"
+                },
+                "dataUid": "uid-30"
               },
               {
                 "type": "container",
@@ -240,7 +349,7 @@
                   "fontSize": "9",
                   "color": "#aaaaaa"
                 },
-                "dataUid": "uid-22"
+                "dataUid": "uid-31"
               },
               {
                 "type": "container",
@@ -252,19 +361,79 @@
                   "fontSize": "9",
                   "color": "#aaaaaa"
                 },
-                "dataUid": "uid-23"
+                "dataUid": "uid-32"
               },
               {
                 "type": "container",
                 "sourceTag": "div",
                 "children": [
-                  "Watch out for road hazards!"
+                  "EMP stuns + damages all nearby enemies"
+                ],
+                "properties": {
+                  "fontSize": "9",
+                  "color": "#00ccff"
+                },
+                "dataUid": "uid-33"
+              },
+              {
+                "type": "container",
+                "sourceTag": "div",
+                "children": [
+                  "Decoys draw enemy fire away from you"
+                ],
+                "properties": {
+                  "fontSize": "9",
+                  "color": "#00ccff"
+                },
+                "dataUid": "uid-34"
+              },
+              {
+                "type": "container",
+                "sourceTag": "div",
+                "children": [
+                  "Heat level rises with kills — more enemies!"
+                ],
+                "properties": {
+                  "fontSize": "9",
+                  "color": "#ffaa00"
+                },
+                "dataUid": "uid-35"
+              },
+              {
+                "type": "container",
+                "sourceTag": "div",
+                "children": [
+                  "Day/Night cycle — night reduces visibility"
+                ],
+                "properties": {
+                  "fontSize": "9",
+                  "color": "#6666ff"
+                },
+                "dataUid": "uid-36"
+              },
+              {
+                "type": "container",
+                "sourceTag": "div",
+                "children": [
+                  "Enemy formations appear at wave 5+"
+                ],
+                "properties": {
+                  "fontSize": "9",
+                  "color": "#ff4444"
+                },
+                "dataUid": "uid-37"
+              },
+              {
+                "type": "container",
+                "sourceTag": "div",
+                "children": [
+                  "Watch the radar for threats!"
                 ],
                 "properties": {
                   "fontSize": "9",
                   "color": "#aaaaaa"
                 },
-                "dataUid": "uid-24"
+                "dataUid": "uid-38"
               },
               {
                 "type": "container",
@@ -276,19 +445,7 @@
                   "fontSize": "9",
                   "color": "#aaaaaa"
                 },
-                "dataUid": "uid-25"
-              },
-              {
-                "type": "container",
-                "sourceTag": "div",
-                "children": [
-                  "Boss armored trucks every 5 waves"
-                ],
-                "properties": {
-                  "fontSize": "9",
-                  "color": "#aaaaaa"
-                },
-                "dataUid": "uid-26"
+                "dataUid": "uid-39"
               }
             ],
             "properties": {
@@ -317,7 +474,7 @@
               "marginTop": "4",
               "cursor": "pointer"
             },
-            "dataUid": "uid-27"
+            "dataUid": "uid-40"
           }
         ],
         "properties": {
@@ -342,7 +499,7 @@
         "column": 0
       },
       "end": {
-        "line": 29,
+        "line": 42,
         "column": 8
       }
     },
@@ -352,7 +509,7 @@
         "column": 2
       },
       "end": {
-        "line": 28,
+        "line": 41,
         "column": 8
       }
     },
@@ -372,7 +529,7 @@
         "column": 4
       },
       "end": {
-        "line": 26,
+        "line": 39,
         "column": 10
       }
     },
@@ -433,7 +590,7 @@
       },
       "end": {
         "line": 9,
-        "column": 59
+        "column": 80
       }
     },
     "uid-11": {
@@ -443,7 +600,7 @@
       },
       "end": {
         "line": 10,
-        "column": 82
+        "column": 74
       }
     },
     "uid-12": {
@@ -453,7 +610,7 @@
       },
       "end": {
         "line": 11,
-        "column": 64
+        "column": 59
       }
     },
     "uid-13": {
@@ -463,7 +620,7 @@
       },
       "end": {
         "line": 12,
-        "column": 60
+        "column": 82
       }
     },
     "uid-14": {
@@ -473,7 +630,7 @@
       },
       "end": {
         "line": 13,
-        "column": 62
+        "column": 64
       }
     },
     "uid-15": {
@@ -483,7 +640,7 @@
       },
       "end": {
         "line": 14,
-        "column": 62
+        "column": 60
       }
     },
     "uid-16": {
@@ -493,7 +650,7 @@
       },
       "end": {
         "line": 15,
-        "column": 55
+        "column": 62
       }
     },
     "uid-17": {
@@ -503,7 +660,7 @@
       },
       "end": {
         "line": 16,
-        "column": 73
+        "column": 62
       }
     },
     "uid-18": {
@@ -513,7 +670,7 @@
       },
       "end": {
         "line": 17,
-        "column": 80
+        "column": 55
       }
     },
     "uid-19": {
@@ -523,7 +680,7 @@
       },
       "end": {
         "line": 18,
-        "column": 82
+        "column": 76
       }
     },
     "uid-20": {
@@ -533,7 +690,7 @@
       },
       "end": {
         "line": 19,
-        "column": 83
+        "column": 71
       }
     },
     "uid-21": {
@@ -543,7 +700,7 @@
       },
       "end": {
         "line": 20,
-        "column": 81
+        "column": 73
       }
     },
     "uid-22": {
@@ -553,7 +710,7 @@
       },
       "end": {
         "line": 21,
-        "column": 77
+        "column": 75
       }
     },
     "uid-23": {
@@ -563,7 +720,7 @@
       },
       "end": {
         "line": 22,
-        "column": 77
+        "column": 75
       }
     },
     "uid-24": {
@@ -583,7 +740,7 @@
       },
       "end": {
         "line": 24,
-        "column": 79
+        "column": 74
       }
     },
     "uid-26": {
@@ -593,16 +750,146 @@
       },
       "end": {
         "line": 25,
-        "column": 80
+        "column": 73
       }
     },
     "uid-27": {
       "start": {
+        "line": 26,
+        "column": 6
+      },
+      "end": {
+        "line": 26,
+        "column": 80
+      }
+    },
+    "uid-28": {
+      "start": {
         "line": 27,
-        "column": 4
+        "column": 6
       },
       "end": {
         "line": 27,
+        "column": 77
+      }
+    },
+    "uid-29": {
+      "start": {
+        "line": 28,
+        "column": 6
+      },
+      "end": {
+        "line": 28,
+        "column": 76
+      }
+    },
+    "uid-30": {
+      "start": {
+        "line": 29,
+        "column": 6
+      },
+      "end": {
+        "line": 29,
+        "column": 81
+      }
+    },
+    "uid-31": {
+      "start": {
+        "line": 30,
+        "column": 6
+      },
+      "end": {
+        "line": 30,
+        "column": 77
+      }
+    },
+    "uid-32": {
+      "start": {
+        "line": 31,
+        "column": 6
+      },
+      "end": {
+        "line": 31,
+        "column": 77
+      }
+    },
+    "uid-33": {
+      "start": {
+        "line": 32,
+        "column": 6
+      },
+      "end": {
+        "line": 32,
+        "column": 85
+      }
+    },
+    "uid-34": {
+      "start": {
+        "line": 33,
+        "column": 6
+      },
+      "end": {
+        "line": 33,
+        "column": 83
+      }
+    },
+    "uid-35": {
+      "start": {
+        "line": 34,
+        "column": 6
+      },
+      "end": {
+        "line": 34,
+        "column": 90
+      }
+    },
+    "uid-36": {
+      "start": {
+        "line": 35,
+        "column": 6
+      },
+      "end": {
+        "line": 35,
+        "column": 89
+      }
+    },
+    "uid-37": {
+      "start": {
+        "line": 36,
+        "column": 6
+      },
+      "end": {
+        "line": 36,
+        "column": 81
+      }
+    },
+    "uid-38": {
+      "start": {
+        "line": 37,
+        "column": 6
+      },
+      "end": {
+        "line": 37,
+        "column": 75
+      }
+    },
+    "uid-39": {
+      "start": {
+        "line": 38,
+        "column": 6
+      },
+      "end": {
+        "line": 38,
+        "column": 79
+      }
+    },
+    "uid-40": {
+      "start": {
+        "line": 40,
+        "column": 4
+      },
+      "end": {
+        "line": 40,
         "column": 225
       }
     }
