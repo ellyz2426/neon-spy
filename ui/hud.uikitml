@@ -8,6 +8,7 @@
     <div flex-direction="row" gap="12" align-items="center">
       <div name="combo" font-size="11" color="#ff4444"></div>
       <div name="distance" font-size="10" color="#aaaaaa">0m</div>
+      <div name="weapon" font-size="10" color="#ff00ff">Weapon: Dual</div>
       <div name="mode-info" font-size="10" color="#ffaa00"></div>
     </div>
     <div name="powerup-status" font-size="9" color="#ffff00"></div>

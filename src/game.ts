@@ -15,8 +15,6 @@ import {
   BoxGeometry,
   CylinderGeometry,
   SphereGeometry,
-  PlaneGeometry,
-  ConeGeometry,
   TorusGeometry,
   Group,
   Vector3,
@@ -34,19 +32,24 @@ const SCHEMES: ColorScheme[] = [
   { name: 'Gold',    primary: '#ffcc00', accent: '#00ccff', bg: '#111100', enemy: '#ff3366', civilian: '#66ff66', powerup: '#ff9900' },
 ];
 
-interface EnemyCar { mesh: Group; x: number; z: number; speed: number; type: 'sedan'|'motorcycle'|'helicopter'|'armored'; hp: number; fireTimer: number; dead: boolean; }
+interface EnemyCar { mesh: Group; x: number; z: number; speed: number; type: 'sedan'|'motorcycle'|'helicopter'|'armored'; hp: number; fireTimer: number; dead: boolean; targetLane: number; laneChangeT: number; deathSpin: number; dying: boolean; }
 interface CivilianCar { mesh: Group; x: number; z: number; speed: number; dead: boolean; }
-interface Bullet { mesh: Mesh; x: number; z: number; fromPlayer: boolean; speed: number; dead: boolean; }
-interface PowerUpObj { mesh: Group; x: number; z: number; type: 'missile'|'oilslick'|'shield'|'speed'|'rapid'; dead: boolean; rotY: number; }
+interface Bullet { mesh: Mesh; x: number; z: number; fromPlayer: boolean; speed: number; dead: boolean; dx: number; }
+interface PowerUpObj { mesh: Group; x: number; z: number; type: 'missile'|'oilslick'|'shield'|'speed'|'rapid'|'weapon'; dead: boolean; rotY: number; }
 interface OilSlick { mesh: Mesh; x: number; z: number; timer: number; dead: boolean; }
+interface SmokeCloud { mesh: Group; x: number; z: number; timer: number; dead: boolean; opacity: number; }
 interface Particle { mesh: Mesh; vel: Vector3; life: number; maxLife: number; }
-interface RoadSeg { mesh: Group; z: number; }
+interface ScorePopup { mesh: Mesh; y: number; life: number; }
+interface RoadHazard { mesh: Group; x: number; z: number; type: 'pothole'|'barrier'|'cone'; dead: boolean; }
+interface RoadSeg { mesh: Group; z: number; isBridge: boolean; }
 interface Achievement { id: string; name: string; desc: string; unlocked: boolean; }
+interface TrailPart { mesh: Mesh; life: number; }
 
 const ROAD_WIDTH = 12; const LANE_COUNT = 5; const LANE_WIDTH = ROAD_WIDTH / LANE_COUNT;
 const ROAD_SEG_LEN = 40; const ROAD_VIS = 8; const PLAYER_Z = -8;
 const SCROLL_SPD = 18; const PLAYER_SPD = 6; const BULLET_SPD = 40;
 const ENEMY_FIRE_RATE = 2.5; const SPAWN_INT = 1.2; const PU_INT = 8; const CIV_INT = 4; const COMBO_DECAY = 3;
+const HAZARD_INT = 6; const SMOKE_DUR = 4; const BRIDGE_CHANCE = 0.12;
 
 // Audio
 let actx: AudioContext | null = null;
@@ -55,11 +58,15 @@ function tone(f: number, d: number, t: OscillatorType = 'square', v = 0.12) {
   try { const c = ensureAudio(); const o = c.createOscillator(); const g = c.createGain(); o.type = t; o.frequency.value = f; g.gain.setValueAtTime(v, c.currentTime); g.gain.exponentialRampToValueAtTime(0.001, c.currentTime + d); o.connect(g).connect(c.destination); o.start(); o.stop(c.currentTime + d); } catch {}
 }
 function sfxShoot() { tone(880, 0.08, 'square', 0.08); }
+function sfxSpread() { tone(1000, 0.06, 'square', 0.06); tone(900, 0.06, 'square', 0.05); }
+function sfxLaser() { tone(1200, 0.12, 'sine', 0.07); }
 function sfxEnemyShoot() { tone(440, 0.1, 'sawtooth', 0.06); }
 function sfxHit() { tone(220, 0.15, 'sawtooth', 0.1); tone(110, 0.2, 'square', 0.08); }
 function sfxExplosion() { tone(80, 0.3, 'sawtooth', 0.15); tone(60, 0.4, 'square', 0.1); }
 function sfxPowerUp() { tone(660, 0.1, 'sine', 0.1); setTimeout(() => tone(880, 0.1, 'sine', 0.1), 80); setTimeout(() => tone(1100, 0.15, 'sine', 0.1), 160); }
+function sfxWeaponUp() { tone(550, 0.08, 'sine', 0.08); setTimeout(() => tone(770, 0.08, 'sine', 0.1), 60); setTimeout(() => tone(990, 0.08, 'sine', 0.1), 120); setTimeout(() => tone(1210, 0.12, 'sine', 0.12), 180); }
 function sfxOilDrop() { tone(200, 0.2, 'triangle', 0.08); }
+function sfxSmoke() { tone(150, 0.3, 'triangle', 0.06); tone(100, 0.4, 'triangle', 0.04); }
 function sfxCivHit() { tone(300, 0.2, 'sine', 0.1); tone(200, 0.3, 'sine', 0.08); }
 function sfxShield() { tone(500, 0.15, 'sine', 0.08); }
 function sfxWave() { tone(440, 0.1, 'sine', 0.08); setTimeout(() => tone(660, 0.15, 'sine', 0.1), 100); }
@@ -68,6 +75,7 @@ function sfxBoss() { tone(150, 0.3, 'square', 0.12); tone(100, 0.5, 'sawtooth', 
 function sfxAch() { tone(880, 0.1, 'sine', 0.1); setTimeout(() => tone(1100, 0.1, 'sine', 0.1), 100); setTimeout(() => tone(1320, 0.15, 'sine', 0.12), 200); }
 function sfxGO() { tone(440, 0.2, 'sine', 0.1); setTimeout(() => tone(330, 0.2, 'sine', 0.1), 200); setTimeout(() => tone(220, 0.3, 'sine', 0.1), 400); }
 function sfxCombo() { tone(660, 0.08, 'sine', 0.08); }
+function sfxHazard() { tone(180, 0.15, 'sawtooth', 0.08); tone(120, 0.2, 'square', 0.06); }
 
 let mosc1: OscillatorNode|null = null, mosc2: OscillatorNode|null = null, mgain: GainNode|null = null;
 function startMusic() { try { const c = ensureAudio(); mgain = c.createGain(); mgain.gain.value = 0.03; mgain.connect(c.destination); mosc1 = c.createOscillator(); mosc1.type = 'sine'; mosc1.frequency.value = 55; mosc1.connect(mgain); mosc1.start(); mosc2 = c.createOscillator(); mosc2.type = 'triangle'; mosc2.frequency.value = 82.5; mosc2.connect(mgain); mosc2.start(); } catch {} }
@@ -99,31 +107,40 @@ export class GameSystem extends createSystem({
   private pGroup!: Group; private pX = 0; private pShield = false; private shieldT = 0; private shieldM!: Mesh;
   private rapidF = false; private rapidT = 0; private spdBoost = false; private spdT = 0;
   private fireT = 0; private fireCD = 0.18; private invT = 0;
+  private weaponLvl = 0; // 0=dual, 1=spread, 2=laser
+  private headlightL!: Mesh; private headlightR!: Mesh;
   private enemies: EnemyCar[] = []; private civs: CivilianCar[] = []; private bullets: Bullet[] = [];
-  private pups: PowerUpObj[] = []; private oils: OilSlick[] = []; private parts: Particle[] = [];
+  private pups: PowerUpObj[] = []; private oils: OilSlick[] = []; private smokes: SmokeCloud[] = [];
+  private parts: Particle[] = []; private popups: ScorePopup[] = []; private trails: TrailPart[] = [];
+  private hazards: RoadHazard[] = [];
   private roadSegs: RoadSeg[] = []; private orbs: Mesh[] = [];
-  private spawnT = 0; private puT = 0; private civT = 0; private waveT = 0; private bossOut = false;
+  private spawnT = 0; private puT = 0; private civT = 0; private waveT = 0; private hazT = 0; private bossOut = false;
   private envG!: Group; private roadG!: Group; private entG!: Group;
   private keys = new Set<string>(); private gpad = { axes: { x: 0, y: 0 }, trigger: false, grip: false, a: false, b: false };
-  private prevGrip = false; private prevB = false;
+  private prevGrip = false; private prevB = false; private prevA = false;
   private panels = new Map<string, Entity>();
   private menuDoc: UIKitDocument|null = null; private hudDoc: UIKitDocument|null = null;
   private pauseDoc: UIKitDocument|null = null; private resDoc: UIKitDocument|null = null;
   private setDoc: UIKitDocument|null = null; private achDoc: UIKitDocument|null = null;
   private statDoc: UIKitDocument|null = null; private tutDoc: UIKitDocument|null = null;
   private achs: Achievement[] = []; private achPg = 0;
-  private career = { gamesPlayed: 0, totalScore: 0, highScore: 0, totalKills: 0, totalDist: 0, totalPU: 0, totalOil: 0, totalBoss: 0, bestWave: 1, bestCombo: 1 };
-  private sKills = 0; private sOils = 0; private sCivHits = 0; private puTypes = new Set<string>(); private oilCD = 0;
+  private career = { gamesPlayed: 0, totalScore: 0, highScore: 0, totalKills: 0, totalDist: 0, totalPU: 0, totalOil: 0, totalBoss: 0, bestWave: 1, bestCombo: 1, totalSmokes: 0, totalHazards: 0, maxWeapon: 0, bridgesCrossed: 0, perfectWaves: 0 };
+  private sKills = 0; private sOils = 0; private sCivHits = 0; private sSmokes = 0; private sHazardsDodged = 0;
+  private puTypes = new Set<string>(); private oilCD = 0; private smokeCD = 0;
+  private waveNoDmg = true; private sPerfectWaves = 0; private sBridges = 0;
+  private shakeT = 0; private shakeStr = 0;
+  private camBase = new Vector3();
 
   private st(doc: UIKitDocument|null, id: string, text: string) { if (!doc) return; (doc.getElementById(id) as UIKit.Text|undefined)?.setProperties({ text }); }
   private sv(e: Entity, v: boolean) { try { const o = (e as any).object3D; if (o) { const s = v ? 3 : 0; o.scale.set(s, s, s); } } catch {} }
 
   init() {
     this._scene = this.world.scene;
+    this.camBase.copy(this.world.camera.position);
     this.loadData(); this.initAchs(); this.buildEnv(); this.buildPlayer(); this.createRoad(); this.setupInput(); this.setupPanels(); this.showP('menu');
   }
 
-  private loadData() { try { const s = localStorage.getItem('neon-spy-career'); if (s) this.career = JSON.parse(s); const a = localStorage.getItem('neon-spy-achs'); if (a) { (JSON.parse(a) as string[]).forEach(id => { const x = this.achs.find(v => v.id === id); if (x) x.unlocked = true; }); } const c = localStorage.getItem('neon-spy-color'); if (c) this.cIdx = parseInt(c) || 0; } catch {} }
+  private loadData() { try { const s = localStorage.getItem('neon-spy-career'); if (s) this.career = { ...this.career, ...JSON.parse(s) }; const a = localStorage.getItem('neon-spy-achs'); if (a) { (JSON.parse(a) as string[]).forEach(id => { const x = this.achs.find(v => v.id === id); if (x) x.unlocked = true; }); } const c = localStorage.getItem('neon-spy-color'); if (c) this.cIdx = parseInt(c) || 0; } catch {} }
   private saveData() { try { localStorage.setItem('neon-spy-career', JSON.stringify(this.career)); localStorage.setItem('neon-spy-achs', JSON.stringify(this.achs.filter(a => a.unlocked).map(a => a.id))); localStorage.setItem('neon-spy-color', String(this.cIdx)); } catch {} }
 
   private initAchs() {
@@ -158,19 +175,49 @@ export class GameSystem extends createSystem({
       { id: 'dist-5k', name: 'Long Haul', desc: 'Travel 5,000 meters', unlocked: false },
       { id: 'games-10', name: 'Regular', desc: 'Play 10 games', unlocked: false },
       { id: 'games-50', name: 'Dedicated', desc: 'Play 50 games', unlocked: false },
+      // New achievements
+      { id: 'weapon-spread', name: 'Spread Eagle', desc: 'Upgrade to spread shot', unlocked: false },
+      { id: 'weapon-laser', name: 'Laser Focus', desc: 'Upgrade to laser beam', unlocked: false },
+      { id: 'weapon-max-3', name: 'Fully Armed', desc: 'Reach max weapon level 3 times', unlocked: false },
+      { id: 'smoke-1', name: 'Smoke Signal', desc: 'Deploy your first smoke screen', unlocked: false },
+      { id: 'smoke-10', name: 'Fog of War', desc: 'Deploy 10 smoke screens in one game', unlocked: false },
+      { id: 'smoke-kill', name: 'Blind Justice', desc: 'Kill an enemy inside your smoke', unlocked: false },
+      { id: 'hazard-dodge-10', name: 'Road Warrior', desc: 'Pass 10 road hazards in one game', unlocked: false },
+      { id: 'hazard-dodge-30', name: 'Highway Star', desc: 'Pass 30 road hazards in one game', unlocked: false },
+      { id: 'bridge-3', name: 'Bridge Builder', desc: 'Cross 3 bridges in one game', unlocked: false },
+      { id: 'bridge-10', name: 'Bridge Master', desc: 'Cross 10 bridges total', unlocked: false },
+      { id: 'perfect-wave', name: 'Untouchable', desc: 'Complete a wave without taking damage', unlocked: false },
+      { id: 'perfect-3', name: 'Ghost Agent', desc: 'Complete 3 perfect waves in one game', unlocked: false },
+      { id: 'speed-kill', name: 'Fast and Furious', desc: 'Kill an enemy during speed boost', unlocked: false },
+      { id: 'multi-kill-3', name: 'Multi Kill', desc: 'Destroy 3 enemies within 1 second', unlocked: false },
+      { id: 'score-200k', name: 'Spymaster', desc: 'Score 200,000 points', unlocked: false },
+      { id: 'kills-200', name: 'Mass Destruction', desc: 'Destroy 200 enemies in one game', unlocked: false },
+      { id: 'dist-10k', name: 'Marathon', desc: 'Travel 10,000 meters in one game', unlocked: false },
+      { id: 'oil-boss', name: 'Slick Move', desc: 'Destroy a boss with an oil slick', unlocked: false },
+      { id: 'wave-30', name: 'Immortal', desc: 'Reach wave 30', unlocked: false },
+      { id: 'all-modes', name: 'Versatile', desc: 'Play all 4 game modes', unlocked: false },
     ];
     try { const a = localStorage.getItem('neon-spy-achs'); if (a) { (JSON.parse(a) as string[]).forEach(id => { const x = this.achs.find(v => v.id === id); if (x) x.unlocked = true; }); } } catch {}
   }
 
   private unlock(id: string) { const a = this.achs.find(v => v.id === id); if (a && !a.unlocked) { a.unlocked = true; sfxAch(); this.saveData(); } }
 
+  private triggerShake(str: number, dur: number) { this.shakeStr = str; this.shakeT = dur; }
+
+  private addPopup(x: number, z: number, pts: number) {
+    const sc = SCHEMES[this.cIdx];
+    const m = sbox(0.8, 0.3, 0.1, pts > 0 ? sc.powerup : sc.enemy, 0.9);
+    m.position.set(x, 2, z); this._scene.add(m);
+    this.popups.push({ mesh: m, y: 2, life: 1.0 });
+  }
+
   private buildEnv() {
     const sc = SCHEMES[this.cIdx];
     this._scene.background = new Color(sc.bg);
     this._scene.fog = new FogExp2(sc.bg, 0.012);
     this.envG = new Group(); this._scene.add(this.envG);
-    const gf = new Mesh(new PlaneGeometry(200, 200), new MeshBasicMaterial({ color: sc.primary, wireframe: true, transparent: true, opacity: 0.06 }));
-    gf.rotation.x = -Math.PI / 2; gf.position.y = -0.01; this.envG.add(gf);
+    const gf = new Mesh(new BoxGeometry(200, 0.01, 200), new MeshBasicMaterial({ color: sc.primary, wireframe: true, transparent: true, opacity: 0.06 }));
+    gf.position.y = -0.01; this.envG.add(gf);
     for (let i = 0; i < 8; i++) {
       const a = (i / 8) * Math.PI * 2, r = 50;
       const p = new Mesh(new CylinderGeometry(0.3, 0.3, 15, 6), new MeshBasicMaterial({ color: sc.primary, wireframe: true, transparent: true, opacity: 0.15 }));
@@ -185,15 +232,22 @@ export class GameSystem extends createSystem({
     this.entG = new Group(); this._scene.add(this.entG);
   }
 
-  private createRoad() { for (let i = 0; i < ROAD_VIS; i++) this.addRoadSeg(i * ROAD_SEG_LEN); }
+  private createRoad() { for (let i = 0; i < ROAD_VIS; i++) this.addRoadSeg(i * ROAD_SEG_LEN, false); }
 
-  private addRoadSeg(z: number) {
+  private addRoadSeg(z: number, bridge: boolean) {
     const sc = SCHEMES[this.cIdx]; const seg = new Group();
-    const rd = new Mesh(new PlaneGeometry(ROAD_WIDTH, ROAD_SEG_LEN), new MeshBasicMaterial({ color: sc.primary, transparent: true, opacity: 0.04 }));
-    rd.rotation.x = -Math.PI / 2; rd.position.set(0, 0.01, z); seg.add(rd);
-    for (let l = 1; l < LANE_COUNT; l++) { const lx = (l - 2) * LANE_WIDTH - LANE_WIDTH / 2; for (let d = 0; d < 8; d++) { const dash = sbox(0.06, 0.02, 1.5, sc.primary, 0.2); dash.position.set(lx, 0.02, z - ROAD_SEG_LEN / 2 + d * 5 + 2.5); seg.add(dash); } }
-    const eL = sbox(0.15, 0.1, ROAD_SEG_LEN, sc.accent, 0.5); eL.position.set(-ROAD_WIDTH / 2 - 0.1, 0.05, z); seg.add(eL);
-    const eR = sbox(0.15, 0.1, ROAD_SEG_LEN, sc.accent, 0.5); eR.position.set(ROAD_WIDTH / 2 + 0.1, 0.05, z); seg.add(eR);
+    const rdColor = bridge ? sc.accent : sc.primary;
+    const rdOp = bridge ? 0.08 : 0.04;
+    const rd = new Mesh(new BoxGeometry(ROAD_WIDTH, 0.02, ROAD_SEG_LEN), new MeshBasicMaterial({ color: rdColor, transparent: true, opacity: rdOp }));
+    rd.position.set(0, bridge ? 1.5 : 0.01, z); seg.add(rd);
+    for (let l = 1; l < LANE_COUNT; l++) { const lx = (l - 2) * LANE_WIDTH - LANE_WIDTH / 2; for (let d = 0; d < 8; d++) { const dash = sbox(0.06, 0.02, 1.5, rdColor, 0.2); dash.position.set(lx, bridge ? 1.52 : 0.02, z - ROAD_SEG_LEN / 2 + d * 5 + 2.5); seg.add(dash); } }
+    const eL = sbox(0.15, bridge ? 1.0 : 0.1, ROAD_SEG_LEN, sc.accent, 0.5); eL.position.set(-ROAD_WIDTH / 2 - 0.1, bridge ? 1.0 : 0.05, z); seg.add(eL);
+    const eR = sbox(0.15, bridge ? 1.0 : 0.1, ROAD_SEG_LEN, sc.accent, 0.5); eR.position.set(ROAD_WIDTH / 2 + 0.1, bridge ? 1.0 : 0.05, z); seg.add(eR);
+    if (bridge) {
+      for (let i = 0; i < 4; i++) { const support = new Mesh(new CylinderGeometry(0.15, 0.15, 1.5, 4), new MeshBasicMaterial({ color: sc.accent, wireframe: true, transparent: true, opacity: 0.3 })); support.position.set(i % 2 === 0 ? -ROAD_WIDTH / 2 : ROAD_WIDTH / 2, 0.75, z - ROAD_SEG_LEN / 4 + (i < 2 ? 0 : ROAD_SEG_LEN / 2)); seg.add(support); }
+      const rail = sbox(0.08, 0.08, ROAD_SEG_LEN, sc.primary, 0.3); rail.position.set(-ROAD_WIDTH / 2 - 0.2, 2.2, z); seg.add(rail);
+      const rail2 = sbox(0.08, 0.08, ROAD_SEG_LEN, sc.primary, 0.3); rail2.position.set(ROAD_WIDTH / 2 + 0.2, 2.2, z); seg.add(rail2);
+    }
     for (let s = 0; s < 2; s++) {
       const sign = s === 0 ? -1 : 1; const lamp = new Group();
       const pole = new Mesh(new CylinderGeometry(0.05, 0.05, 4, 4), new MeshBasicMaterial({ color: sc.primary, wireframe: true, transparent: true, opacity: 0.3 }));
@@ -202,7 +256,7 @@ export class GameSystem extends createSystem({
       lt.position.y = 4.1; lamp.add(lt);
       lamp.position.set(sign * (ROAD_WIDTH / 2 + 1.5), 0, z); seg.add(lamp);
     }
-    this.roadG.add(seg); this.roadSegs.push({ mesh: seg, z });
+    this.roadG.add(seg); this.roadSegs.push({ mesh: seg, z, isBridge: bridge });
   }
 
   private buildPlayer() {
@@ -214,6 +268,12 @@ export class GameSystem extends createSystem({
     for (const sx of [-0.4, 0.4]) { const g = sbox(0.08, 0.08, 0.5, sc.accent, 0.8); g.position.set(sx, 0.3, 1.4); this.pGroup.add(g); }
     for (const [wx, wz] of [[-0.65, 0.7], [0.65, 0.7], [-0.65, -0.7], [0.65, -0.7]]) { const w = new Mesh(new TorusGeometry(0.18, 0.06, 6, 8), new MeshBasicMaterial({ color: sc.accent, wireframe: true })); w.rotation.y = Math.PI / 2; w.position.set(wx, 0.18, wz); this.pGroup.add(w); }
     const gl = new Mesh(new SphereGeometry(0.2, 6, 6), new MeshBasicMaterial({ color: sc.accent, transparent: true, opacity: 0.4 })); gl.position.set(0, 0.3, -1.3); this.pGroup.add(gl);
+    // Headlight beams
+    this.headlightL = new Mesh(new BoxGeometry(0.3, 0.05, 8), new MeshBasicMaterial({ color: sc.primary, transparent: true, opacity: 0.08 }));
+    this.headlightL.position.set(-0.35, 0.35, 5.5); this.pGroup.add(this.headlightL);
+    this.headlightR = new Mesh(new BoxGeometry(0.3, 0.05, 8), new MeshBasicMaterial({ color: sc.primary, transparent: true, opacity: 0.08 }));
+    this.headlightR.position.set(0.35, 0.35, 5.5); this.pGroup.add(this.headlightR);
+    // Shield mesh
     this.shieldM = new Mesh(new SphereGeometry(1.5, 12, 12), new MeshBasicMaterial({ color: sc.powerup, wireframe: true, transparent: true, opacity: 0 })); this.shieldM.position.y = 0.5; this.pGroup.add(this.shieldM);
     this.pGroup.position.set(0, 0, PLAYER_Z); this.entG.add(this.pGroup);
   }
@@ -226,7 +286,7 @@ export class GameSystem extends createSystem({
     else { const b = sbox(1.6, 0.5, 3.2, sc.enemy, 0.7); b.position.y = 0.4; g.add(b); const tu = sbox(0.8, 0.3, 0.8, sc.enemy, 0.6); tu.position.set(0, 0.75, 0.3); g.add(tu); const ba = sbox(0.1, 0.1, 1.0, sc.enemy, 0.8); ba.position.set(0, 0.8, 1.2); g.add(ba); for (const sx of [-0.9, 0.9]) { const pl = sbox(0.1, 0.4, 2.8, sc.enemy, 0.4); pl.position.set(sx, 0.4, 0); g.add(pl); } hp = this.wave >= 10 ? 8 : 5; }
     g.position.set(laneX(lane), 0, z); this.entG.add(g);
     const spd = type === 'motorcycle' ? SCROLL_SPD * 0.7 : type === 'helicopter' ? SCROLL_SPD * 0.5 : type === 'armored' ? SCROLL_SPD * 0.3 : SCROLL_SPD * 0.6;
-    return { mesh: g, x: laneX(lane), z, speed: spd, type, hp, fireTimer: rf(0.5, 2), dead: false };
+    return { mesh: g, x: laneX(lane), z, speed: spd, type, hp, fireTimer: rf(0.5, 2), dead: false, targetLane: lane, laneChangeT: rf(2, 5), deathSpin: 0, dying: false };
   }
 
   private mkCiv(lane: number, z: number): CivilianCar {
@@ -241,20 +301,33 @@ export class GameSystem extends createSystem({
     const sc = SCHEMES[this.cIdx]; const g = new Group();
     const base = sbox(1.0, 0.6, 1.8, sc.powerup, 0.5); base.position.y = 0.5; g.add(base);
     let icon: Mesh;
-    if (type === 'missile') { icon = new Mesh(new ConeGeometry(0.2, 0.6, 6), new MeshBasicMaterial({ color: '#ff4400', transparent: true, opacity: 0.7 })); icon.rotation.x = -Math.PI / 2; }
+    if (type === 'missile') { icon = new Mesh(new CylinderGeometry(0, 0.2, 0.6, 6), new MeshBasicMaterial({ color: '#ff4400', transparent: true, opacity: 0.7 })); icon.rotation.x = -Math.PI / 2; }
     else if (type === 'oilslick') { icon = new Mesh(new CylinderGeometry(0.3, 0.3, 0.1, 8), new MeshBasicMaterial({ color: '#333333', transparent: true, opacity: 0.7 })); }
     else if (type === 'shield') { icon = new Mesh(new SphereGeometry(0.25, 8, 8), new MeshBasicMaterial({ color: '#00aaff', wireframe: true, transparent: true, opacity: 0.7 })); }
-    else if (type === 'speed') { icon = new Mesh(new ConeGeometry(0.15, 0.5, 4), new MeshBasicMaterial({ color: '#ffaa00', transparent: true, opacity: 0.7 })); icon.rotation.x = -Math.PI / 2; }
+    else if (type === 'speed') { icon = new Mesh(new CylinderGeometry(0, 0.15, 0.5, 4), new MeshBasicMaterial({ color: '#ffaa00', transparent: true, opacity: 0.7 })); icon.rotation.x = -Math.PI / 2; }
+    else if (type === 'weapon') { icon = new Mesh(new BoxGeometry(0.4, 0.15, 0.3), new MeshBasicMaterial({ color: '#ff00ff', transparent: true, opacity: 0.8 })); }
     else { icon = new Mesh(new BoxGeometry(0.3, 0.1, 0.4), new MeshBasicMaterial({ color: '#ff0000', transparent: true, opacity: 0.7 })); }
     icon.position.y = 1.1; g.add(icon);
     g.position.set(laneX(lane), 0, z); this.entG.add(g);
     return { mesh: g, x: laneX(lane), z, type, dead: false, rotY: 0 };
   }
 
-  private fireBullet(x: number, z: number, fp: boolean) {
-    const sc = SCHEMES[this.cIdx]; const m = sbox(0.08, 0.08, 0.4, fp ? sc.primary : sc.enemy, 0.9);
+  private mkHazard(type: RoadHazard['type'], lane: number, z: number): RoadHazard {
+    const sc = SCHEMES[this.cIdx]; const g = new Group();
+    if (type === 'pothole') { const h = new Mesh(new CylinderGeometry(0.6, 0.6, 0.04, 8), new MeshBasicMaterial({ color: '#222222', transparent: true, opacity: 0.7 })); h.rotation.x = -Math.PI / 2; h.position.y = 0.01; g.add(h); const rim = new Mesh(new TorusGeometry(0.6, 0.05, 4, 8), new MeshBasicMaterial({ color: sc.enemy, transparent: true, opacity: 0.4 })); rim.rotation.x = -Math.PI / 2; rim.position.y = 0.02; g.add(rim); }
+    else if (type === 'barrier') { const b = sbox(2.0, 0.8, 0.3, sc.enemy, 0.6); b.position.y = 0.4; g.add(b); const str = sbox(0.1, 0.8, 0.1, sc.accent, 0.4); str.position.set(-0.9, 0.4, 0); g.add(str); const str2 = sbox(0.1, 0.8, 0.1, sc.accent, 0.4); str2.position.set(0.9, 0.4, 0); g.add(str2); }
+    else { const c1 = new Mesh(new CylinderGeometry(0.05, 0.25, 0.6, 6), new MeshBasicMaterial({ color: '#ff6600', transparent: true, opacity: 0.7 })); c1.position.y = 0.3; g.add(c1); }
+    g.position.set(laneX(lane), 0, z); this.entG.add(g);
+    return { mesh: g, x: laneX(lane), z, type, dead: false };
+  }
+
+  private fireBullet(x: number, z: number, fp: boolean, dx = 0) {
+    const sc = SCHEMES[this.cIdx]; const color = fp ? (this.weaponLvl >= 2 ? '#ff00ff' : sc.primary) : sc.enemy;
+    const w = this.weaponLvl >= 2 && fp ? 0.12 : 0.08; const h = this.weaponLvl >= 2 && fp ? 0.04 : 0.08;
+    const d = this.weaponLvl >= 2 && fp ? 0.8 : 0.4;
+    const m = sbox(w, h, d, color, 0.9);
     m.position.set(x, 0.4, z); this.entG.add(m);
-    this.bullets.push({ mesh: m, x, z, fromPlayer: fp, speed: fp ? BULLET_SPD : -BULLET_SPD * 0.6, dead: false });
+    this.bullets.push({ mesh: m, x, z, fromPlayer: fp, speed: fp ? BULLET_SPD : -BULLET_SPD * 0.6, dead: false, dx });
   }
 
   private dropOil() {
@@ -264,8 +337,29 @@ export class GameSystem extends createSystem({
     sfxOilDrop(); this.career.totalOil++;
   }
 
+  private dropSmoke() {
+    const sc = SCHEMES[this.cIdx]; const g = new Group();
+    for (let i = 0; i < 6; i++) {
+      const s = new Mesh(new SphereGeometry(rf(0.4, 0.8), 6, 6), new MeshBasicMaterial({ color: '#888888', transparent: true, opacity: 0.35 }));
+      s.position.set(rf(-1, 1), rf(0.3, 1.5), rf(-1, 1)); g.add(s);
+    }
+    g.position.set(this.pX, 0, PLAYER_Z - 3); this.entG.add(g);
+    this.smokes.push({ mesh: g, x: this.pX, z: PLAYER_Z - 3, timer: SMOKE_DUR, dead: false, opacity: 0.35 });
+    sfxSmoke(); this.career.totalSmokes++; this.sSmokes++;
+    if (this.sSmokes >= 1) this.unlock('smoke-1');
+    if (this.sSmokes >= 10) this.unlock('smoke-10');
+  }
+
   private spawnParts(x: number, y: number, z: number, c: string, n = 12) {
     for (let i = 0; i < n; i++) { const m = new Mesh(new BoxGeometry(0.08, 0.08, 0.08), new MeshBasicMaterial({ color: c, transparent: true, opacity: 1 })); m.position.set(x, y, z); this._scene.add(m); this.parts.push({ mesh: m, vel: new Vector3(rf(-3, 3), rf(1, 5), rf(-3, 3)), life: rf(0.3, 0.8), maxLife: 0.8 }); }
+  }
+
+  private addTrail() {
+    if (!this.spdBoost) return;
+    const sc = SCHEMES[this.cIdx];
+    const m = new Mesh(new BoxGeometry(0.6, 0.1, 0.3), new MeshBasicMaterial({ color: sc.accent, transparent: true, opacity: 0.5 }));
+    m.position.set(this.pX, 0.15, PLAYER_Z - 1.5); this._scene.add(m);
+    this.trails.push({ mesh: m, life: 0.6 });
   }
 
   private setupInput() {
@@ -333,15 +427,24 @@ export class GameSystem extends createSystem({
     this.st(this.statDoc, 'stat-games', `Games: ${c.gamesPlayed}`); this.st(this.statDoc, 'stat-score', `Total Score: ${c.totalScore}`); this.st(this.statDoc, 'stat-best', `Best Score: ${c.highScore}`);
     this.st(this.statDoc, 'stat-kills', `Total Kills: ${c.totalKills}`); this.st(this.statDoc, 'stat-distance', `Distance: ${Math.floor(c.totalDist)}m`); this.st(this.statDoc, 'stat-powerups', `Power-Ups: ${c.totalPU}`);
     this.st(this.statDoc, 'stat-oils', `Oil Slicks: ${c.totalOil}`); this.st(this.statDoc, 'stat-bosses', `Boss Kills: ${c.totalBoss}`); this.st(this.statDoc, 'stat-wave', `Best Wave: ${c.bestWave}`); this.st(this.statDoc, 'stat-combo', `Best Combo: ${c.bestCombo}x`);
+    this.st(this.statDoc, 'stat-smokes', `Smoke Screens: ${c.totalSmokes}`); this.st(this.statDoc, 'stat-bridges', `Bridges Crossed: ${c.bridgesCrossed}`);
   }
+
+  private modesPlayed = new Set<string>();
 
   private startG() {
     this.gState = 'playing'; this.score = 0; this.lives = this.diff === 'normal' ? 3 : this.diff === 'hard' ? 2 : 1;
     this.wave = 1; this.dist = 0; this.combo = 1; this.comboT = 0; this.maxCombo = 1; this.gTime = 0; this.moves = 0;
     this.scrollSpd = SCROLL_SPD; this.pX = 0; this.pShield = false; this.shieldT = 0; this.rapidF = false; this.rapidT = 0;
     this.spdBoost = false; this.spdT = 0; this.fireT = 0; this.fireCD = 0.18; this.invT = 1; this.bossOut = false;
-    this.spawnT = 1; this.puT = PU_INT / 2; this.civT = CIV_INT / 2; this.waveT = 0;
-    this.sKills = 0; this.sOils = 0; this.sCivHits = 0; this.puTypes.clear();
+    this.weaponLvl = 0; this.waveNoDmg = true; this.sPerfectWaves = 0; this.sBridges = 0;
+    this.spawnT = 1; this.puT = PU_INT / 2; this.civT = CIV_INT / 2; this.waveT = 0; this.hazT = HAZARD_INT / 2;
+    this.sKills = 0; this.sOils = 0; this.sCivHits = 0; this.sSmokes = 0; this.sHazardsDodged = 0;
+    this.puTypes.clear(); this.smokeCD = 0; this.oilCD = 0;
+    this.modesPlayed.add(this.mode);
+    try { const mp = localStorage.getItem('neon-spy-modes'); if (mp) JSON.parse(mp).forEach((m: string) => this.modesPlayed.add(m)); } catch {}
+    try { localStorage.setItem('neon-spy-modes', JSON.stringify([...this.modesPlayed])); } catch {}
+    if (this.modesPlayed.size >= 4) this.unlock('all-modes');
     this.clearEnts(); this.pGroup.position.set(0, 0, PLAYER_Z); this.pGroup.visible = true;
     (this.shieldM.material as MeshBasicMaterial).opacity = 0;
     this.career.gamesPlayed++; if (this.career.gamesPlayed >= 10) this.unlock('games-10'); if (this.career.gamesPlayed >= 50) this.unlock('games-50');
@@ -352,60 +455,109 @@ export class GameSystem extends createSystem({
     for (const e of this.enemies) this.entG.remove(e.mesh); for (const c of this.civs) this.entG.remove(c.mesh);
     for (const b of this.bullets) this.entG.remove(b.mesh); for (const p of this.pups) this.entG.remove(p.mesh);
     for (const o of this.oils) this.entG.remove(o.mesh); for (const p of this.parts) this._scene.remove(p.mesh);
+    for (const s of this.smokes) this.entG.remove(s.mesh); for (const h of this.hazards) this.entG.remove(h.mesh);
+    for (const p of this.popups) this._scene.remove(p.mesh); for (const t of this.trails) this._scene.remove(t.mesh);
     this.enemies = []; this.civs = []; this.bullets = []; this.pups = []; this.oils = []; this.parts = [];
+    this.smokes = []; this.hazards = []; this.popups = []; this.trails = [];
   }
 
   private pauseG() { this.gState = 'paused'; this.showP('pause'); }
   private resumeG() { this.gState = 'playing'; this.showP('playing'); }
   private quitMenu() { this.gState = 'menu'; this.clearEnts(); this.pGroup.visible = false; this.showP('menu'); this.st(this.menuDoc, 'high-score', `Best: ${this.career.highScore}`); }
 
+  private recentKillTimes: number[] = [];
+
   private gameOver() {
     this.gState = 'gameover'; sfxGO();
     this.career.totalScore += this.score; if (this.score > this.career.highScore) this.career.highScore = this.score;
     if (this.wave > this.career.bestWave) this.career.bestWave = this.wave; if (this.maxCombo > this.career.bestCombo) this.career.bestCombo = this.maxCombo;
-    this.career.totalDist += this.dist; this.saveData();
+    this.career.totalDist += this.dist; if (this.weaponLvl > this.career.maxWeapon) this.career.maxWeapon = this.weaponLvl;
+    this.career.perfectWaves += this.sPerfectWaves; this.career.bridgesCrossed += this.sBridges;
+    this.saveData();
     if (this.score >= 5000) this.unlock('score-5k'); if (this.score >= 10000) this.unlock('score-10k'); if (this.score >= 25000) this.unlock('score-25k');
-    if (this.score >= 50000) this.unlock('score-50k'); if (this.score >= 100000) this.unlock('score-100k');
-    if (this.wave >= 5) this.unlock('wave-5'); if (this.wave >= 10) this.unlock('wave-10'); if (this.wave >= 15) this.unlock('wave-15'); if (this.wave >= 20) this.unlock('wave-20');
-    if (this.dist >= 1000) this.unlock('dist-1k'); if (this.dist >= 5000) this.unlock('dist-5k');
+    if (this.score >= 50000) this.unlock('score-50k'); if (this.score >= 100000) this.unlock('score-100k'); if (this.score >= 200000) this.unlock('score-200k');
+    if (this.wave >= 5) this.unlock('wave-5'); if (this.wave >= 10) this.unlock('wave-10'); if (this.wave >= 15) this.unlock('wave-15'); if (this.wave >= 20) this.unlock('wave-20'); if (this.wave >= 30) this.unlock('wave-30');
+    if (this.dist >= 1000) this.unlock('dist-1k'); if (this.dist >= 5000) this.unlock('dist-5k'); if (this.dist >= 10000) this.unlock('dist-10k');
+    if (this.sKills >= 200) this.unlock('kills-200');
     if (this.wave >= 5 && this.sCivHits === 0) this.unlock('clean-op');
     this.st(this.resDoc, 'result-score', `Score: ${this.score}`); this.st(this.resDoc, 'result-wave', `Wave: ${this.wave}`);
     this.st(this.resDoc, 'result-distance', `Distance: ${Math.floor(this.dist)}m`); this.st(this.resDoc, 'result-combo', `Max Combo: ${this.maxCombo}x`);
     this.st(this.resDoc, 'result-kills', `Kills: ${this.sKills}`);
+    this.st(this.resDoc, 'result-weapon', `Weapon: Lv${this.weaponLvl}`);
     this.st(this.resDoc, 'result-best', this.score >= this.career.highScore ? 'NEW HIGH SCORE!' : `Best: ${this.career.highScore}`);
     this.showP('results');
   }
 
   update(delta: number, time: number) {
     for (let i = 0; i < this.orbs.length; i++) { const o = this.orbs[i]; o.position.y += Math.sin(time * 0.5 + i) * 0.002; (o.material as MeshBasicMaterial).opacity = 0.2 + Math.sin(time + i * 0.7) * 0.1; }
+    // Screen shake
+    if (this.shakeT > 0) { this.shakeT -= delta; const s = this.shakeStr * (this.shakeT / 0.3); this.world.camera.position.x = this.camBase.x + rf(-s, s); this.world.camera.position.y = this.camBase.y + rf(-s, s); } else { this.world.camera.position.x = this.camBase.x; this.world.camera.position.y = this.camBase.y; }
     this.pollGP();
     if (this.gState !== 'playing') return;
     const dt = Math.min(delta, 0.05); this.gTime += dt;
     if (this.mode === 'speed' && this.gTime >= 120) { this.gameOver(); return; }
     this.handleInput(dt);
     const spd = this.spdBoost ? this.scrollSpd * 1.5 : this.scrollSpd; this.dist += spd * dt;
+    // Road scroll + bridge tracking
     for (const s of this.roadSegs) { s.z -= spd * dt; s.mesh.position.z = s.z; }
-    while (this.roadSegs.length > 0 && this.roadSegs[0].z < PLAYER_Z - ROAD_SEG_LEN * 2) { const old = this.roadSegs.shift()!; this.roadG.remove(old.mesh); this.addRoadSeg(this.roadSegs[this.roadSegs.length - 1].z + ROAD_SEG_LEN); }
+    while (this.roadSegs.length > 0 && this.roadSegs[0].z < PLAYER_Z - ROAD_SEG_LEN * 2) {
+      const old = this.roadSegs.shift()!;
+      if (old.isBridge) { this.sBridges++; this.career.bridgesCrossed++; if (this.sBridges >= 3) this.unlock('bridge-3'); if (this.career.bridgesCrossed >= 10) this.unlock('bridge-10'); }
+      this.roadG.remove(old.mesh);
+      const nb = Math.random() < BRIDGE_CHANCE;
+      this.addRoadSeg(this.roadSegs[this.roadSegs.length - 1].z + ROAD_SEG_LEN, nb);
+    }
+    // Spawn enemies
     this.spawnT -= dt; if (this.spawnT <= 0) { this.spawnE(); this.spawnT = Math.max(0.3, SPAWN_INT - this.wave * 0.04) * (this.diff === 'insane' ? 0.6 : this.diff === 'hard' ? 0.8 : 1); }
     this.civT -= dt; if (this.civT <= 0) { this.civs.push(this.mkCiv(ri(0, LANE_COUNT - 1), PLAYER_Z + 80)); this.civT = CIV_INT * (this.diff === 'insane' ? 0.7 : 1); }
-    this.puT -= dt; if (this.puT <= 0) { const ts: PowerUpObj['type'][] = ['missile', 'oilslick', 'shield', 'speed', 'rapid']; this.pups.push(this.mkPU(ts[ri(0, ts.length - 1)], ri(0, LANE_COUNT - 1), PLAYER_Z + 70)); this.puT = PU_INT; }
-    this.waveT += dt; if (this.waveT >= 20) { this.waveT = 0; this.wave++; this.scrollSpd = SCROLL_SPD + this.wave * 0.8; sfxWave(); updateMusic(this.wave); if (this.wave % 5 === 0 && !this.bossOut) { this.bossOut = true; this.enemies.push(this.mkEnemy('armored', ri(1, 3), PLAYER_Z + 80)); sfxBoss(); } else { this.bossOut = false; } }
+    this.puT -= dt; if (this.puT <= 0) { const ts: PowerUpObj['type'][] = ['missile', 'oilslick', 'shield', 'speed', 'rapid', 'weapon']; this.pups.push(this.mkPU(ts[ri(0, ts.length - 1)], ri(0, LANE_COUNT - 1), PLAYER_Z + 70)); this.puT = PU_INT; }
+    // Road hazards
+    this.hazT -= dt; if (this.hazT <= 0) { const ht: RoadHazard['type'][] = ['pothole', 'barrier', 'cone']; this.hazards.push(this.mkHazard(ht[ri(0, 2)], ri(0, LANE_COUNT - 1), PLAYER_Z + 75)); this.hazT = Math.max(2, HAZARD_INT - this.wave * 0.15); }
+    // Wave progression
+    this.waveT += dt; if (this.waveT >= 20) {
+      this.waveT = 0;
+      if (this.waveNoDmg) { this.sPerfectWaves++; this.unlock('perfect-wave'); if (this.sPerfectWaves >= 3) this.unlock('perfect-3'); }
+      this.waveNoDmg = true;
+      this.wave++; this.scrollSpd = SCROLL_SPD + this.wave * 0.8; sfxWave(); updateMusic(this.wave);
+      if (this.wave % 5 === 0 && !this.bossOut) { this.bossOut = true; this.enemies.push(this.mkEnemy('armored', ri(1, 3), PLAYER_Z + 80)); sfxBoss(); } else { this.bossOut = false; }
+    }
     if (this.comboT > 0) { this.comboT -= dt; if (this.comboT <= 0) this.combo = 1; }
     if (this.pShield) { this.shieldT -= dt; if (this.shieldT <= 0) { this.pShield = false; (this.shieldM.material as MeshBasicMaterial).opacity = 0; } else { (this.shieldM.material as MeshBasicMaterial).opacity = 0.2 + Math.sin(time * 8) * 0.1; } }
-    if (this.rapidF) { this.rapidT -= dt; if (this.rapidT <= 0) { this.rapidF = false; this.fireCD = 0.18; } }
+    if (this.rapidF) { this.rapidT -= dt; if (this.rapidT <= 0) { this.rapidF = false; this.fireCD = this.weaponLvl >= 2 ? 0.12 : 0.18; } }
     if (this.spdBoost) { this.spdT -= dt; if (this.spdT <= 0) this.spdBoost = false; }
     if (this.invT > 0) this.invT -= dt;
-    this.fireT -= dt; const wantShoot = this.keys.has('f') || this.keys.has(' ') || this.keys.has('j') || this.keys.has('k') || this.gpad.trigger;
-    if (this.fireT <= 0 && wantShoot) { this.fireBullet(this.pX - 0.4, PLAYER_Z + 1.5, true); this.fireBullet(this.pX + 0.4, PLAYER_Z + 1.5, true); sfxShoot(); this.fireT = this.fireCD; }
+    // Firing
+    this.fireT -= dt;
+    const wantShoot = this.keys.has('f') || this.keys.has(' ') || this.keys.has('j') || this.keys.has('k') || this.gpad.trigger;
+    if (this.fireT <= 0 && wantShoot) {
+      if (this.weaponLvl === 0) { this.fireBullet(this.pX - 0.4, PLAYER_Z + 1.5, true); this.fireBullet(this.pX + 0.4, PLAYER_Z + 1.5, true); sfxShoot(); }
+      else if (this.weaponLvl === 1) { this.fireBullet(this.pX - 0.5, PLAYER_Z + 1.5, true, -4); this.fireBullet(this.pX, PLAYER_Z + 1.5, true); this.fireBullet(this.pX + 0.5, PLAYER_Z + 1.5, true, 4); sfxSpread(); }
+      else { this.fireBullet(this.pX - 0.3, PLAYER_Z + 1.5, true); this.fireBullet(this.pX + 0.3, PLAYER_Z + 1.5, true); sfxLaser(); }
+      this.fireT = this.fireCD;
+    }
+    // Oil slick
     if ((this.keys.has('e') || this.keys.has('q')) && this.oilCD <= 0) { this.dropOil(); this.oilCD = 1; this.sOils++; if (this.sOils >= 5) this.unlock('oil-5'); if (this.sOils >= 15) this.unlock('oil-15'); }
     if (this.oilCD > 0) this.oilCD -= dt;
     if (this.gpad.grip && !this.prevGrip && this.oilCD <= 0) { this.dropOil(); this.oilCD = 1; this.sOils++; }
     this.prevGrip = this.gpad.grip;
+    // Smoke screen (R key or A button)
+    if (this.keys.has('r') && this.smokeCD <= 0) { this.dropSmoke(); this.smokeCD = 2; }
+    if (this.gpad.a && !this.prevA && this.smokeCD <= 0) { this.dropSmoke(); this.smokeCD = 2; }
+    this.prevA = this.gpad.a;
+    if (this.smokeCD > 0) this.smokeCD -= dt;
+    // Pause
     if (this.gpad.b && !this.prevB) { if (this.gState === 'playing') this.pauseG(); else if (this.gState === 'paused') this.resumeG(); }
     this.prevB = this.gpad.b;
-    this.updEnemies(dt, spd); this.updCivs(dt, spd); this.updBullets(dt); this.updPUs(dt, spd); this.updOils(dt, spd); this.updParts(dt); this.checkColl();
+    // Speed boost trail
+    this.addTrail();
+    // Update all entities
+    this.updEnemies(dt, spd, time); this.updCivs(dt, spd); this.updBullets(dt); this.updPUs(dt, spd); this.updOils(dt, spd); this.updSmokes(dt, spd); this.updParts(dt); this.updPopups(dt); this.updTrails(dt); this.updHazards(dt, spd); this.checkColl(time);
     this.updHUD();
     this.pGroup.position.x = this.pX;
+    // Headlight flicker
+    const hlOp = 0.06 + Math.sin(time * 3) * 0.02;
+    (this.headlightL.material as MeshBasicMaterial).opacity = hlOp;
+    (this.headlightR.material as MeshBasicMaterial).opacity = hlOp;
     if (this.invT > 0) this.pGroup.visible = Math.floor(time * 10) % 2 === 0; else this.pGroup.visible = true;
   }
 
@@ -420,27 +572,83 @@ export class GameSystem extends createSystem({
     if (this.mode === 'challenge' && this.moves >= 500) this.gameOver();
   }
 
-  private updEnemies(dt: number, ss: number) {
-    for (const e of this.enemies) { if (e.dead) continue; e.z -= (ss - e.speed) * dt; e.mesh.position.z = e.z; if (e.type === 'helicopter' && e.mesh.children[1]) e.mesh.children[1].rotation.y += dt * 10; if (e.type !== 'motorcycle') { e.fireTimer -= dt; if (e.fireTimer <= 0 && e.z > PLAYER_Z && e.z < PLAYER_Z + 50) { this.fireBullet(e.x, e.z - 1.5, false); sfxEnemyShoot(); e.fireTimer = ENEMY_FIRE_RATE / (1 + this.wave * 0.1); } } if (e.z < PLAYER_Z - 20) e.dead = true; }
+  private updEnemies(dt: number, ss: number, time: number) {
+    for (const e of this.enemies) {
+      if (e.dead) continue;
+      // Death animation
+      if (e.dying) { e.deathSpin += dt * 8; e.mesh.rotation.y = e.deathSpin; e.mesh.position.y += dt * 2; const mat = e.mesh.children[0] as Mesh; if (mat?.material) (mat.material as MeshBasicMaterial).opacity = Math.max(0, 0.6 - e.deathSpin / 5); if (e.deathSpin > 3) e.dead = true; continue; }
+      e.z -= (ss - e.speed) * dt; e.mesh.position.z = e.z;
+      // Lane-change AI
+      e.laneChangeT -= dt;
+      if (e.laneChangeT <= 0 && e.type !== 'armored') {
+        e.targetLane = clp(e.targetLane + ri(-1, 1), 0, LANE_COUNT - 1);
+        e.laneChangeT = rf(2, 4);
+      }
+      const tlx = laneX(e.targetLane);
+      if (Math.abs(e.x - tlx) > 0.1) { e.x += (tlx > e.x ? 1 : -1) * PLAYER_SPD * 0.5 * dt; e.mesh.position.x = e.x; }
+      // Helicopter rotor
+      if (e.type === 'helicopter' && e.mesh.children[1]) e.mesh.children[1].rotation.y += dt * 10;
+      // Check if in smoke
+      let inSmoke = false;
+      for (const s of this.smokes) { if (!s.dead && Math.abs(e.x - s.x) < 2 && Math.abs(e.z - s.z) < 3) { inSmoke = true; break; } }
+      // Enemy fire (suppressed in smoke)
+      if (e.type !== 'motorcycle' && !inSmoke) { e.fireTimer -= dt; if (e.fireTimer <= 0 && e.z > PLAYER_Z && e.z < PLAYER_Z + 50) { this.fireBullet(e.x, e.z - 1.5, false); sfxEnemyShoot(); e.fireTimer = ENEMY_FIRE_RATE / (1 + this.wave * 0.1); } }
+      if (e.z < PLAYER_Z - 20) e.dead = true;
+    }
     this.enemies = this.enemies.filter(e => { if (e.dead) { this.entG.remove(e.mesh); return false; } return true; });
   }
+
   private updCivs(dt: number, ss: number) { for (const c of this.civs) { if (c.dead) continue; c.z -= (ss - c.speed) * dt; c.mesh.position.z = c.z; if (c.z < PLAYER_Z - 20) c.dead = true; } this.civs = this.civs.filter(c => { if (c.dead) { this.entG.remove(c.mesh); return false; } return true; }); }
-  private updBullets(dt: number) { for (const b of this.bullets) { if (b.dead) continue; b.z += b.speed * dt; b.mesh.position.z = b.z; if (b.z > PLAYER_Z + 100 || b.z < PLAYER_Z - 30) b.dead = true; } this.bullets = this.bullets.filter(b => { if (b.dead) { this.entG.remove(b.mesh); return false; } return true; }); }
+  private updBullets(dt: number) { for (const b of this.bullets) { if (b.dead) continue; b.z += b.speed * dt; b.x += b.dx * dt; b.mesh.position.z = b.z; b.mesh.position.x = b.x; if (b.z > PLAYER_Z + 100 || b.z < PLAYER_Z - 30 || Math.abs(b.x) > 15) b.dead = true; } this.bullets = this.bullets.filter(b => { if (b.dead) { this.entG.remove(b.mesh); return false; } return true; }); }
   private updPUs(dt: number, ss: number) { for (const p of this.pups) { if (p.dead) continue; p.z -= ss * 0.3 * dt; p.rotY += dt * 2; p.mesh.position.z = p.z; p.mesh.rotation.y = p.rotY; if (p.z < PLAYER_Z - 20) p.dead = true; } this.pups = this.pups.filter(p => { if (p.dead) { this.entG.remove(p.mesh); return false; } return true; }); }
   private updOils(dt: number, ss: number) { for (const o of this.oils) { if (o.dead) continue; o.z -= ss * dt; o.mesh.position.z = o.z; o.timer -= dt; if (o.timer <= 0 || o.z < PLAYER_Z - 30) o.dead = true; } this.oils = this.oils.filter(o => { if (o.dead) { this.entG.remove(o.mesh); return false; } return true; }); }
+  private updSmokes(dt: number, ss: number) {
+    for (const s of this.smokes) { if (s.dead) continue; s.z -= ss * dt; s.mesh.position.z = s.z; s.timer -= dt; s.opacity = 0.35 * (s.timer / SMOKE_DUR);
+      s.mesh.children.forEach(c => { if ((c as Mesh).material) ((c as Mesh).material as MeshBasicMaterial).opacity = s.opacity; });
+      if (s.timer <= 0) s.dead = true;
+    }
+    this.smokes = this.smokes.filter(s => { if (s.dead) { this.entG.remove(s.mesh); return false; } return true; });
+  }
+  private updHazards(dt: number, ss: number) {
+    for (const h of this.hazards) { if (h.dead) continue; h.z -= ss * dt; h.mesh.position.z = h.z; if (h.z < PLAYER_Z - 10) { h.dead = true; this.sHazardsDodged++; if (this.sHazardsDodged >= 10) this.unlock('hazard-dodge-10'); if (this.sHazardsDodged >= 30) this.unlock('hazard-dodge-30'); } }
+    this.hazards = this.hazards.filter(h => { if (h.dead) { this.entG.remove(h.mesh); return false; } return true; });
+  }
   private updParts(dt: number) { for (const p of this.parts) { p.vel.y -= 9.8 * dt; p.mesh.position.add(p.vel.clone().multiplyScalar(dt)); p.life -= dt; (p.mesh.material as MeshBasicMaterial).opacity = Math.max(0, p.life / p.maxLife); } this.parts = this.parts.filter(p => { if (p.life <= 0) { this._scene.remove(p.mesh); return false; } return true; }); }
+  private updPopups(dt: number) { for (const p of this.popups) { p.y += dt * 2; p.mesh.position.y = p.y; p.life -= dt; (p.mesh.material as MeshBasicMaterial).opacity = Math.max(0, p.life); } this.popups = this.popups.filter(p => { if (p.life <= 0) { this._scene.remove(p.mesh); return false; } return true; }); }
+  private updTrails(dt: number) { for (const t of this.trails) { t.life -= dt; (t.mesh.material as MeshBasicMaterial).opacity = Math.max(0, t.life * 0.8); } this.trails = this.trails.filter(t => { if (t.life <= 0) { this._scene.remove(t.mesh); return false; } return true; }); }
 
-  private checkColl() {
+  private checkColl(time: number) {
     const px = this.pX, pz = PLAYER_Z;
-    for (const b of this.bullets) { if (b.dead || !b.fromPlayer) continue; for (const e of this.enemies) { if (e.dead) continue; const hw = e.type === 'armored' ? 1.8 : e.type === 'helicopter' ? 1.0 : 0.7; const hd = e.type === 'armored' ? 3.5 : 2.2; if (Math.abs(b.x - e.x) < hw && Math.abs(b.z - e.z) < hd) { b.dead = true; e.hp--; sfxHit(); if (e.hp <= 0) { e.dead = true; const pts = e.type === 'armored' ? 1000 : e.type === 'helicopter' ? 300 : e.type === 'motorcycle' ? 150 : 100; this.score += pts * this.combo; this.spawnParts(e.x, 0.5, e.z, SCHEMES[this.cIdx].enemy, e.type === 'armored' ? 25 : 15); sfxExplosion(); this.sKills++; this.career.totalKills++; this.combo = Math.min(8, this.combo + 1); this.comboT = COMBO_DECAY; if (this.combo > this.maxCombo) this.maxCombo = this.combo; if (this.combo >= 3) { this.unlock('combo-3'); sfxCombo(); } if (this.combo >= 5) this.unlock('combo-5'); if (this.combo >= 8) this.unlock('combo-8'); this.unlock('first-kill'); if (this.sKills >= 10) this.unlock('kills-10'); if (this.sKills >= 25) this.unlock('kills-25'); if (this.sKills >= 50) this.unlock('kills-50'); if (this.sKills >= 100) this.unlock('kills-100'); if (e.type === 'armored') { this.career.totalBoss++; this.unlock('boss-kill'); if (this.career.totalBoss >= 5) this.unlock('boss-5'); } } else { this.spawnParts(b.x, 0.5, b.z, '#ffffff', 4); } break; } } }
+    // Player bullets vs enemies
+    for (const b of this.bullets) { if (b.dead || !b.fromPlayer) continue; for (const e of this.enemies) { if (e.dead || e.dying) continue; const hw = e.type === 'armored' ? 1.8 : e.type === 'helicopter' ? 1.0 : 0.7; const hd = e.type === 'armored' ? 3.5 : 2.2; if (Math.abs(b.x - e.x) < hw && Math.abs(b.z - e.z) < hd) { b.dead = true; e.hp--; sfxHit(); if (e.hp <= 0) { e.dying = true; e.deathSpin = 0; const pts = e.type === 'armored' ? 1000 : e.type === 'helicopter' ? 300 : e.type === 'motorcycle' ? 150 : 100; const gained = pts * this.combo; this.score += gained; this.addPopup(e.x, e.z, gained); this.spawnParts(e.x, 0.5, e.z, SCHEMES[this.cIdx].enemy, e.type === 'armored' ? 25 : 15); sfxExplosion(); if (e.type === 'armored') this.triggerShake(0.15, 0.3); this.sKills++; this.career.totalKills++; this.recentKillTimes.push(time); this.recentKillTimes = this.recentKillTimes.filter(t => time - t < 1); if (this.recentKillTimes.length >= 3) this.unlock('multi-kill-3'); this.combo = Math.min(8, this.combo + 1); this.comboT = COMBO_DECAY; if (this.combo > this.maxCombo) this.maxCombo = this.combo; if (this.combo >= 3) { this.unlock('combo-3'); sfxCombo(); } if (this.combo >= 5) this.unlock('combo-5'); if (this.combo >= 8) this.unlock('combo-8'); this.unlock('first-kill'); if (this.sKills >= 10) this.unlock('kills-10'); if (this.sKills >= 25) this.unlock('kills-25'); if (this.sKills >= 50) this.unlock('kills-50'); if (this.sKills >= 100) this.unlock('kills-100'); if (this.sKills >= 200) this.unlock('kills-200'); if (e.type === 'armored') { this.career.totalBoss++; this.unlock('boss-kill'); if (this.career.totalBoss >= 5) this.unlock('boss-5'); } if (this.spdBoost) this.unlock('speed-kill'); for (const sm of this.smokes) { if (!sm.dead && Math.abs(e.x - sm.x) < 2 && Math.abs(e.z - sm.z) < 3) { this.unlock('smoke-kill'); break; } } } else { this.spawnParts(b.x, 0.5, b.z, '#ffffff', 4); } break; } } }
+    // Enemy bullets vs player
     if (this.invT <= 0) { for (const b of this.bullets) { if (b.dead || b.fromPlayer) continue; if (Math.abs(b.x - px) < 0.8 && Math.abs(b.z - pz) < 1.5) { b.dead = true; if (this.pShield) { this.pShield = false; (this.shieldM.material as MeshBasicMaterial).opacity = 0; sfxShield(); this.spawnParts(px, 0.5, pz, SCHEMES[this.cIdx].powerup, 10); } else { this.pHit(); } } } }
-    if (this.invT <= 0) { for (const e of this.enemies) { if (e.dead) continue; const hw = e.type === 'armored' ? 1.6 : 0.9; if (Math.abs(px - e.x) < hw && Math.abs(pz - e.z) < 2.0) { if (this.pShield) { e.dead = true; this.pShield = false; (this.shieldM.material as MeshBasicMaterial).opacity = 0; this.spawnParts(e.x, 0.5, e.z, SCHEMES[this.cIdx].enemy, 15); sfxExplosion(); } else { this.pHit(); } } } }
-    if (this.invT <= 0) { for (const c of this.civs) { if (c.dead) continue; if (Math.abs(px - c.x) < 0.9 && Math.abs(pz - c.z) < 2.0) { c.dead = true; this.sCivHits++; sfxCivHit(); this.spawnParts(c.x, 0.5, c.z, SCHEMES[this.cIdx].civilian, 8); this.score = Math.max(0, this.score - 200); this.combo = 1; } } }
-    for (const pu of this.pups) { if (pu.dead) continue; if (Math.abs(px - pu.x) < 1.2 && Math.abs(pz - pu.z) < 2.2) { pu.dead = true; sfxPowerUp(); this.career.totalPU++; this.puTypes.add(pu.type); switch (pu.type) { case 'missile': for (let i = -1; i <= 1; i++) this.fireBullet(px + i * 0.8, pz + 2, true); break; case 'oilslick': this.dropOil(); this.dropOil(); break; case 'shield': this.pShield = true; this.shieldT = 10; this.unlock('shield-use'); break; case 'speed': this.spdBoost = true; this.spdT = 8; this.unlock('speed-use'); break; case 'rapid': this.rapidF = true; this.rapidT = 8; this.fireCD = 0.06; this.unlock('rapid-use'); break; } if (this.puTypes.size >= 5) this.unlock('all-pu'); this.spawnParts(pu.x, 0.5, pu.z, SCHEMES[this.cIdx].powerup, 10); } }
-    for (const o of this.oils) { if (o.dead) continue; for (const e of this.enemies) { if (e.dead) continue; if (Math.abs(o.x - e.x) < 1.0 && Math.abs(o.z - e.z) < 1.5) { e.dead = true; o.dead = true; this.score += 200 * this.combo; this.spawnParts(e.x, 0.5, e.z, '#333333', 12); sfxHit(); this.sKills++; this.career.totalKills++; } } }
+    // Enemy body vs player
+    if (this.invT <= 0) { for (const e of this.enemies) { if (e.dead || e.dying) continue; const hw = e.type === 'armored' ? 1.6 : 0.9; if (Math.abs(px - e.x) < hw && Math.abs(pz - e.z) < 2.0) { if (this.pShield) { e.dying = true; e.deathSpin = 0; this.pShield = false; (this.shieldM.material as MeshBasicMaterial).opacity = 0; this.spawnParts(e.x, 0.5, e.z, SCHEMES[this.cIdx].enemy, 15); sfxExplosion(); } else { this.pHit(); } } } }
+    // Civilian collision
+    if (this.invT <= 0) { for (const c of this.civs) { if (c.dead) continue; if (Math.abs(px - c.x) < 0.9 && Math.abs(pz - c.z) < 2.0) { c.dead = true; this.sCivHits++; sfxCivHit(); this.spawnParts(c.x, 0.5, c.z, SCHEMES[this.cIdx].civilian, 8); this.score = Math.max(0, this.score - 200); this.addPopup(c.x, c.z, -200); this.combo = 1; } } }
+    // Road hazard collision
+    if (this.invT <= 0) { for (const h of this.hazards) { if (h.dead) continue; const hr = h.type === 'barrier' ? 1.2 : 0.7; if (Math.abs(px - h.x) < hr && Math.abs(pz - h.z) < 1.5) { h.dead = true; sfxHazard(); this.spawnParts(h.x, 0.3, h.z, '#ff6600', 8); if (this.pShield) { this.pShield = false; (this.shieldM.material as MeshBasicMaterial).opacity = 0; } else { this.pHit(); } } } }
+    // Power-up pickup
+    for (const pu of this.pups) { if (pu.dead) continue; if (Math.abs(px - pu.x) < 1.2 && Math.abs(pz - pu.z) < 2.2) { pu.dead = true; sfxPowerUp(); this.career.totalPU++; this.puTypes.add(pu.type);
+      switch (pu.type) {
+        case 'missile': for (let i = -1; i <= 1; i++) this.fireBullet(px + i * 0.8, pz + 2, true); break;
+        case 'oilslick': this.dropOil(); this.dropOil(); break;
+        case 'shield': this.pShield = true; this.shieldT = 10; this.unlock('shield-use'); break;
+        case 'speed': this.spdBoost = true; this.spdT = 8; this.unlock('speed-use'); break;
+        case 'rapid': this.rapidF = true; this.rapidT = 8; this.fireCD = this.weaponLvl >= 2 ? 0.04 : 0.06; this.unlock('rapid-use'); break;
+        case 'weapon': this.weaponLvl = Math.min(2, this.weaponLvl + 1); sfxWeaponUp(); if (this.weaponLvl >= 1) this.unlock('weapon-spread'); if (this.weaponLvl >= 2) { this.unlock('weapon-laser'); this.fireCD = this.rapidF ? 0.04 : 0.12; }
+          let maxCount = 0; try { const mc = localStorage.getItem('neon-spy-maxwep'); maxCount = mc ? parseInt(mc) : 0; } catch {} if (this.weaponLvl >= 2) { maxCount++; try { localStorage.setItem('neon-spy-maxwep', String(maxCount)); } catch {} if (maxCount >= 3) this.unlock('weapon-max-3'); }
+          break;
+      }
+      if (this.puTypes.size >= 5) this.unlock('all-pu');
+      this.spawnParts(pu.x, 0.5, pu.z, SCHEMES[this.cIdx].powerup, 10);
+    } }
+    // Oil slick vs enemies
+    for (const o of this.oils) { if (o.dead) continue; for (const e of this.enemies) { if (e.dead || e.dying) continue; if (Math.abs(o.x - e.x) < 1.0 && Math.abs(o.z - e.z) < 1.5) { e.dying = true; e.deathSpin = 0; o.dead = true; const gained = 200 * this.combo; this.score += gained; this.addPopup(e.x, e.z, gained); this.spawnParts(e.x, 0.5, e.z, '#333333', 12); sfxHit(); this.sKills++; this.career.totalKills++; if (e.type === 'armored') { this.career.totalBoss++; this.unlock('oil-boss'); } } } }
   }
 
-  private pHit() { if (this.mode === 'zen') return; this.lives--; sfxDeath(); this.spawnParts(this.pX, 0.5, PLAYER_Z, SCHEMES[this.cIdx].primary, 20); this.invT = 2; this.combo = 1; if (this.lives <= 0) this.gameOver(); }
+  private pHit() { if (this.mode === 'zen') return; this.lives--; sfxDeath(); this.spawnParts(this.pX, 0.5, PLAYER_Z, SCHEMES[this.cIdx].primary, 20); this.invT = 2; this.combo = 1; this.weaponLvl = Math.max(0, this.weaponLvl - 1); this.waveNoDmg = false; this.triggerShake(0.12, 0.25); if (this.lives <= 0) this.gameOver(); }
 
   private spawnE() { const l = ri(0, LANE_COUNT - 1); const z = PLAYER_Z + 70 + rf(0, 20); let t: EnemyCar['type'] = 'sedan'; const r = Math.random(); if (this.wave >= 3 && r < 0.2) t = 'motorcycle'; if (this.wave >= 5 && r < 0.15) t = 'helicopter'; this.enemies.push(this.mkEnemy(t, l, z)); }
 
@@ -449,6 +657,8 @@ export class GameSystem extends createSystem({
     this.st(this.hudDoc, 'score', `Score: ${this.score}`); this.st(this.hudDoc, 'lives', `Lives: ${'o'.repeat(Math.max(0, this.lives))}`);
     this.st(this.hudDoc, 'wave', `Wave ${this.wave}`); this.st(this.hudDoc, 'combo', this.combo > 1 ? `${this.combo}x Combo` : '');
     this.st(this.hudDoc, 'distance', `${Math.floor(this.dist)}m`);
+    const wn = ['Dual', 'Spread', 'Laser'][this.weaponLvl];
+    this.st(this.hudDoc, 'weapon', `Weapon: ${wn}`);
     const st = this.pShield ? `Shield: ${Math.ceil(this.shieldT)}s` : ''; const rt = this.rapidF ? `Rapid: ${Math.ceil(this.rapidT)}s` : ''; const spt = this.spdBoost ? `Speed: ${Math.ceil(this.spdT)}s` : '';
     this.st(this.hudDoc, 'powerup-status', [st, rt, spt].filter(Boolean).join(' | '));
     if (this.mode === 'speed') this.st(this.hudDoc, 'mode-info', `Time: ${Math.ceil(120 - this.gTime)}s`);

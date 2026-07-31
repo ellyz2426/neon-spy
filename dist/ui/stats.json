@@ -153,6 +153,32 @@
                   "color": "#ffaa00"
                 },
                 "dataUid": "uid-14"
+              },
+              {
+                "type": "container",
+                "sourceTag": "div",
+                "children": [
+                  "Smoke Screens: 0"
+                ],
+                "properties": {
+                  "name": "stat-smokes",
+                  "fontSize": "10",
+                  "color": "#888888"
+                },
+                "dataUid": "uid-15"
+              },
+              {
+                "type": "container",
+                "sourceTag": "div",
+                "children": [
+                  "Bridges Crossed: 0"
+                ],
+                "properties": {
+                  "name": "stat-bridges",
+                  "fontSize": "10",
+                  "color": "#00ccff"
+                },
+                "dataUid": "uid-16"
               }
             ],
             "properties": {
@@ -181,7 +207,7 @@
               "marginTop": "4",
               "cursor": "pointer"
             },
-            "dataUid": "uid-15"
+            "dataUid": "uid-17"
           }
         ],
         "properties": {
@@ -206,7 +232,7 @@
         "column": 0
       },
       "end": {
-        "line": 17,
+        "line": 19,
         "column": 8
       }
     },
@@ -216,7 +242,7 @@
         "column": 2
       },
       "end": {
-        "line": 16,
+        "line": 18,
         "column": 8
       }
     },
@@ -236,7 +262,7 @@
         "column": 4
       },
       "end": {
-        "line": 14,
+        "line": 16,
         "column": 10
       }
     },
@@ -342,11 +368,31 @@
     },
     "uid-15": {
       "start": {
+        "line": 14,
+        "column": 6
+      },
+      "end": {
+        "line": 14,
+        "column": 83
+      }
+    },
+    "uid-16": {
+      "start": {
         "line": 15,
-        "column": 4
+        "column": 6
       },
       "end": {
         "line": 15,
+        "column": 86
+      }
+    },
+    "uid-17": {
+      "start": {
+        "line": 17,
+        "column": 4
+      },
+      "end": {
+        "line": 17,
         "column": 222
       }
     }
