@@ -249,6 +249,45 @@
                 "type": "container",
                 "sourceTag": "div",
                 "children": [
+                  "Truck Docks: 0"
+                ],
+                "properties": {
+                  "name": "stat-docks",
+                  "fontSize": "10",
+                  "color": "#0088ff"
+                },
+                "dataUid": "uid-22"
+              },
+              {
+                "type": "container",
+                "sourceTag": "div",
+                "children": [
+                  "Ramp Jumps: 0"
+                ],
+                "properties": {
+                  "name": "stat-jumps",
+                  "fontSize": "10",
+                  "color": "#ffff00"
+                },
+                "dataUid": "uid-23"
+              },
+              {
+                "type": "container",
+                "sourceTag": "div",
+                "children": [
+                  "Rain Distance: 0m"
+                ],
+                "properties": {
+                  "name": "stat-rain",
+                  "fontSize": "10",
+                  "color": "#4488ff"
+                },
+                "dataUid": "uid-24"
+              },
+              {
+                "type": "container",
+                "sourceTag": "div",
+                "children": [
                   "Formations Cleared: 0"
                 ],
                 "properties": {
@@ -256,7 +295,7 @@
                   "fontSize": "10",
                   "color": "#ffaa00"
                 },
-                "dataUid": "uid-22"
+                "dataUid": "uid-25"
               }
             ],
             "properties": {
@@ -285,7 +324,7 @@
               "marginTop": "4",
               "cursor": "pointer"
             },
-            "dataUid": "uid-23"
+            "dataUid": "uid-26"
           }
         ],
         "properties": {
@@ -310,7 +349,7 @@
         "column": 0
       },
       "end": {
-        "line": 25,
+        "line": 28,
         "column": 8
       }
     },
@@ -320,7 +359,7 @@
         "column": 2
       },
       "end": {
-        "line": 24,
+        "line": 27,
         "column": 8
       }
     },
@@ -340,7 +379,7 @@
         "column": 4
       },
       "end": {
-        "line": 22,
+        "line": 25,
         "column": 10
       }
     },
@@ -521,16 +560,46 @@
       },
       "end": {
         "line": 21,
-        "column": 92
+        "column": 80
       }
     },
     "uid-23": {
       "start": {
+        "line": 22,
+        "column": 6
+      },
+      "end": {
+        "line": 22,
+        "column": 79
+      }
+    },
+    "uid-24": {
+      "start": {
         "line": 23,
-        "column": 4
+        "column": 6
       },
       "end": {
         "line": 23,
+        "column": 82
+      }
+    },
+    "uid-25": {
+      "start": {
+        "line": 24,
+        "column": 6
+      },
+      "end": {
+        "line": 24,
+        "column": 92
+      }
+    },
+    "uid-26": {
+      "start": {
+        "line": 26,
+        "column": 4
+      },
+      "end": {
+        "line": 26,
         "column": 222
       }
     }

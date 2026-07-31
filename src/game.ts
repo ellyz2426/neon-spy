@@ -49,6 +49,9 @@ interface RoadsideObj { mesh: Group; z: number; side: number; }
 interface Mission { type: 'kill_count'|'distance_nodmg'|'kill_oil'|'kill_timed'|'combo_target'; desc: string; target: number; progress: number; timer: number; active: boolean; }
 interface Decoy { mesh: Group; x: number; z: number; life: number; dead: boolean; }
 interface EMPWave { mesh: Mesh; radius: number; life: number; dead: boolean; }
+interface WeaponsTruck { mesh: Group; x: number; z: number; active: boolean; docked: boolean; dockTimer: number; }
+interface RainDrop { mesh: Mesh; vel: number; }
+interface JumpRamp { mesh: Group; x: number; z: number; dead: boolean; }
 
 const ROAD_WIDTH = 12; const LANE_COUNT = 5; const LANE_WIDTH = ROAD_WIDTH / LANE_COUNT;
 const ROAD_SEG_LEN = 40; const ROAD_VIS = 8; const PLAYER_Z = -8;
@@ -87,6 +90,11 @@ function sfxEMP() { tone(100, 0.4, 'sine', 0.15); tone(200, 0.3, 'triangle', 0.1
 function sfxDecoy() { tone(500, 0.12, 'sine', 0.08); setTimeout(() => tone(700, 0.1, 'triangle', 0.06), 60); setTimeout(() => tone(500, 0.15, 'sine', 0.06), 120); }
 function sfxFormation() { tone(400, 0.15, 'square', 0.08); setTimeout(() => tone(500, 0.1, 'square', 0.06), 100); }
 function sfxHeatUp() { tone(330, 0.15, 'sawtooth', 0.08); setTimeout(() => tone(440, 0.1, 'sawtooth', 0.08), 80); setTimeout(() => tone(550, 0.15, 'sawtooth', 0.1), 160); }
+function sfxTruckHorn() { tone(180, 0.4, 'square', 0.1); tone(220, 0.35, 'square', 0.08); }
+function sfxDock() { tone(440, 0.1, 'sine', 0.12); setTimeout(() => tone(550, 0.1, 'sine', 0.12), 60); setTimeout(() => tone(660, 0.1, 'sine', 0.12), 120); setTimeout(() => tone(880, 0.15, 'sine', 0.14), 180); setTimeout(() => tone(1100, 0.2, 'sine', 0.12), 250); }
+function sfxJump() { tone(300, 0.08, 'sine', 0.1); setTimeout(() => tone(400, 0.1, 'sine', 0.1), 50); setTimeout(() => tone(550, 0.12, 'sine', 0.1), 100); setTimeout(() => tone(700, 0.15, 'sine', 0.08), 150); }
+function sfxLand() { tone(150, 0.2, 'sawtooth', 0.1); tone(80, 0.3, 'square', 0.06); }
+function sfxRainStart() { tone(100, 0.5, 'triangle', 0.04); tone(150, 0.4, 'triangle', 0.03); }
 
 let mosc1: OscillatorNode|null = null, mosc2: OscillatorNode|null = null, mosc3: OscillatorNode|null = null;
 let mgain: GainNode|null = null, mgain2: GainNode|null = null, mgain3: GainNode|null = null;
@@ -157,7 +165,7 @@ export class GameSystem extends createSystem({
   private statDoc: UIKitDocument|null = null; private tutDoc: UIKitDocument|null = null;
   private radarDoc: UIKitDocument|null = null;
   private achs: Achievement[] = []; private achPg = 0;
-  private career = { gamesPlayed: 0, totalScore: 0, highScore: 0, totalKills: 0, totalDist: 0, totalPU: 0, totalOil: 0, totalBoss: 0, bestWave: 1, bestCombo: 1, totalSmokes: 0, totalHazards: 0, maxWeapon: 0, bridgesCrossed: 0, perfectWaves: 0, totalMissions: 0, totalVanKills: 0, totalInterceptorKills: 0, totalEMPs: 0, totalDecoys: 0 };
+  private career = { gamesPlayed: 0, totalScore: 0, highScore: 0, totalKills: 0, totalDist: 0, totalPU: 0, totalOil: 0, totalBoss: 0, bestWave: 1, bestCombo: 1, totalSmokes: 0, totalHazards: 0, maxWeapon: 0, bridgesCrossed: 0, perfectWaves: 0, totalMissions: 0, totalVanKills: 0, totalInterceptorKills: 0, totalEMPs: 0, totalDecoys: 0, totalDocks: 0, totalJumps: 0, totalRainDist: 0 };
   private sKills = 0; private sOils = 0; private sCivHits = 0; private sSmokes = 0; private sHazardsDodged = 0;
   private puTypes = new Set<string>(); private oilCD = 0; private smokeCD = 0;
   private waveNoDmg = true; private sPerfectWaves = 0; private sBridges = 0;
@@ -181,6 +189,10 @@ export class GameSystem extends createSystem({
   private heatLevel = 0; private heatTimer = 0; private maxHeatLevel = 0;
   private nightPhase = 0; private dayNightTimer = 0; private isNight = false;
   private formationCD = 0; private sFormationsCleared = 0;
+  // Round 6: Weapons Truck, Jump Ramp, Rain
+  private weaponsTruck: WeaponsTruck | null = null; private truckCD = 0; private sDocks = 0;
+  private jumpRamps: JumpRamp[] = []; private rampCD = 0; private isAirborne = false; private airT = 0; private airY = 0; private sJumps = 0;
+  private rainDrops: RainDrop[] = []; private isRaining = false; private rainTimer = 0; private rainCD = 0; private sRainDist = 0;
 
   private st(doc: UIKitDocument|null, id: string, text: string) { if (!doc) return; (doc.getElementById(id) as UIKit.Text|undefined)?.setProperties({ text }); }
   private sv(e: Entity, v: boolean) { try { const o = (e as any).object3D; if (o) { const s = v ? 3 : 0; o.scale.set(s, s, s); } } catch {} }
@@ -293,6 +305,25 @@ export class GameSystem extends createSystem({
       { id: 'score-1m', name: 'Millionaire', desc: 'Score 1,000,000 points', unlocked: false },
       { id: 'perfect-10', name: 'Perfect Ten', desc: 'Complete 10 perfect waves total', unlocked: false },
       { id: 'total-kills-1k', name: 'Thousand Kills', desc: 'Destroy 1,000 enemies total', unlocked: false },
+      // Round 6 achievements (18 new — total 110)
+      { id: 'truck-dock', name: 'Pit Stop', desc: 'Dock with the weapons truck', unlocked: false },
+      { id: 'truck-dock-3', name: 'Supply Chain', desc: 'Dock with truck 3 times in one game', unlocked: false },
+      { id: 'truck-dock-5', name: 'Logistics Expert', desc: 'Dock 5 times in one game', unlocked: false },
+      { id: 'total-docks-20', name: 'Regular Customer', desc: 'Dock 20 times total', unlocked: false },
+      { id: 'jump-1', name: 'Airborne', desc: 'Launch off your first ramp', unlocked: false },
+      { id: 'jump-5', name: 'Stunt Driver', desc: 'Hit 5 ramps in one game', unlocked: false },
+      { id: 'jump-10', name: 'Daredevil', desc: 'Hit 10 ramps in one game', unlocked: false },
+      { id: 'jump-kill', name: 'Air Strike', desc: 'Kill an enemy while airborne', unlocked: false },
+      { id: 'total-jumps-50', name: 'Sky Pilot', desc: 'Hit 50 ramps total', unlocked: false },
+      { id: 'rain-drive', name: 'Storm Chaser', desc: 'Drive through rain for the first time', unlocked: false },
+      { id: 'rain-500m', name: 'Rain Runner', desc: 'Drive 500m in rain in one game', unlocked: false },
+      { id: 'rain-kill-10', name: 'Monsoon Warrior', desc: 'Kill 10 enemies during rain', unlocked: false },
+      { id: 'rain-boss', name: 'Thunderbolt', desc: 'Kill a boss during rain', unlocked: false },
+      { id: 'all-weather', name: 'All Weather', desc: 'Fight in day, night, and rain', unlocked: false },
+      { id: 'total-rain-5k', name: 'Wet Road Veteran', desc: 'Drive 5,000m in rain total', unlocked: false },
+      { id: 'jump-dodge-mine', name: 'Mine Hopper', desc: 'Jump over a mine', unlocked: false },
+      { id: 'dock-full-weapon', name: 'Maximum Firepower', desc: 'Dock at max weapon level for bonus', unlocked: false },
+      { id: 'wave-75', name: 'Endurance', desc: 'Reach wave 75', unlocked: false },
     ];
     try { const a = localStorage.getItem('neon-spy-achs'); if (a) { (JSON.parse(a) as string[]).forEach(id => { const x = this.achs.find(v => v.id === id); if (x) x.unlocked = true; }); } } catch {}
   }
@@ -592,6 +623,7 @@ export class GameSystem extends createSystem({
   private decoyHitsAbsorbed = 0;
   private gadgetsUsed = new Set<string>();
   private nightKills = 0; private nightCycles = 0;
+  private rainKills = 0; private seenDay = false; private seenNight = false; private seenRain = false;
 
   private checkGadgetMaster() {
     this.gadgetsUsed.add('emp'); // Called from EMP or Decoy
@@ -604,6 +636,69 @@ export class GameSystem extends createSystem({
 
   private spawnParts(x: number, y: number, z: number, c: string, n = 12) {
     for (let i = 0; i < n; i++) { const m = new Mesh(new BoxGeometry(0.08, 0.08, 0.08), new MeshBasicMaterial({ color: c, transparent: true, opacity: 1 })); m.position.set(x, y, z); this._scene.add(m); this.parts.push({ mesh: m, vel: new Vector3(rf(-3, 3), rf(1, 5), rf(-3, 3)), life: rf(0.3, 0.8), maxLife: 0.8 }); }
+  }
+
+  private spawnWeaponsTruck() {
+    if (this.weaponsTruck) return;
+    const sc = SCHEMES[this.cIdx]; const g = new Group();
+    // Large friendly truck body
+    const body = sbox(2.0, 0.8, 4.5, '#0088ff', 0.5); body.position.y = 0.6; g.add(body);
+    const cab = sbox(1.8, 0.6, 1.5, '#0066cc', 0.5); cab.position.set(0, 1.2, 1.5); g.add(cab);
+    const trailer = sbox(1.8, 0.9, 2.5, '#0088ff', 0.4); trailer.position.set(0, 0.7, -0.5); g.add(trailer);
+    // Neon stripe
+    const stripe = sbox(2.1, 0.08, 4.5, sc.powerup, 0.7); stripe.position.set(0, 0.3, 0); g.add(stripe);
+    // Star emblem on top
+    const emblem = new Mesh(new SphereGeometry(0.3, 6, 6), new MeshBasicMaterial({ color: sc.powerup, transparent: true, opacity: 0.6 }));
+    emblem.position.set(0, 1.6, 0); g.add(emblem);
+    // Wheels
+    for (const [wx, wz] of [[-1.1, 1.5], [1.1, 1.5], [-1.1, -1.2], [1.1, -1.2]]) {
+      const w = new Mesh(new TorusGeometry(0.22, 0.08, 6, 8), new MeshBasicMaterial({ color: '#0066cc', wireframe: true }));
+      w.rotation.y = Math.PI / 2; w.position.set(wx, 0.22, wz); g.add(w);
+    }
+    // Start from behind player
+    const startZ = PLAYER_Z - 40;
+    g.position.set(laneX(2), 0, startZ); this.entG.add(g);
+    this.weaponsTruck = { mesh: g, x: laneX(2), z: startZ, active: true, docked: false, dockTimer: 0 };
+    sfxTruckHorn();
+  }
+
+  private mkJumpRamp(lane: number, z: number): JumpRamp {
+    const sc = SCHEMES[this.cIdx]; const g = new Group();
+    // Ramp surface
+    const ramp = sbox(LANE_WIDTH * 0.8, 0.08, 2.0, sc.powerup, 0.5);
+    ramp.position.set(0, 0.2, 0); ramp.rotation.x = -0.25; g.add(ramp);
+    // Chevron arrows
+    for (let i = 0; i < 3; i++) {
+      const chev = sbox(0.5, 0.04, 0.08, sc.accent, 0.7);
+      chev.position.set(0, 0.28, -0.5 + i * 0.5); g.add(chev);
+    }
+    // Side rails
+    const rL = sbox(0.08, 0.3, 2.0, sc.accent, 0.4); rL.position.set(-LANE_WIDTH * 0.4, 0.15, 0); g.add(rL);
+    const rR = sbox(0.08, 0.3, 2.0, sc.accent, 0.4); rR.position.set(LANE_WIDTH * 0.4, 0.15, 0); g.add(rR);
+    g.position.set(laneX(lane), 0, z); this.entG.add(g);
+    return { mesh: g, x: laneX(lane), z, dead: false };
+  }
+
+  private startRain() {
+    if (this.isRaining) return;
+    this.isRaining = true;
+    sfxRainStart();
+    this.seenRain = true;
+    this.unlock('rain-drive');
+    // Create rain particles
+    const sc = SCHEMES[this.cIdx];
+    for (let i = 0; i < 80; i++) {
+      const drop = new Mesh(new BoxGeometry(0.02, 0.5, 0.02), new MeshBasicMaterial({ color: '#4488ff', transparent: true, opacity: rf(0.2, 0.5) }));
+      drop.position.set(rf(-20, 20), rf(2, 15), rf(PLAYER_Z - 15, PLAYER_Z + 60));
+      this._scene.add(drop);
+      this.rainDrops.push({ mesh: drop, vel: rf(12, 20) });
+    }
+  }
+
+  private stopRain() {
+    this.isRaining = false;
+    for (const r of this.rainDrops) this._scene.remove(r.mesh);
+    this.rainDrops = [];
   }
 
   private addTrail() {
@@ -796,6 +891,9 @@ export class GameSystem extends createSystem({
     this.st(this.statDoc, 'stat-interceptors', `Interceptor Kills: ${c.totalInterceptorKills}`);
     this.st(this.statDoc, 'stat-emps', `EMPs Used: ${c.totalEMPs || 0}`);
     this.st(this.statDoc, 'stat-decoys', `Decoys Deployed: ${c.totalDecoys || 0}`);
+    this.st(this.statDoc, 'stat-docks', `Truck Docks: ${c.totalDocks || 0}`);
+    this.st(this.statDoc, 'stat-jumps', `Ramp Jumps: ${c.totalJumps || 0}`);
+    this.st(this.statDoc, 'stat-rain', `Rain Distance: ${Math.floor(c.totalRainDist || 0)}m`);
     try { const fc = localStorage.getItem('neon-spy-formations'); this.st(this.statDoc, 'stat-formations', `Formations Cleared: ${fc || '0'}`); } catch {}
   }
 
@@ -828,6 +926,11 @@ export class GameSystem extends createSystem({
     this.formationCD = 30; this.sFormationsCleared = 0;
     this.decoyHitsAbsorbed = 0; this.gadgetsUsed.clear();
     this.nightKills = 0; this.nightCycles = 0;
+    // R6 resets
+    this.weaponsTruck = null; this.truckCD = 30; this.sDocks = 0;
+    this.jumpRamps = []; this.rampCD = 12; this.isAirborne = false; this.airT = 0; this.airY = 0; this.sJumps = 0;
+    this.stopRain(); this.rainTimer = 0; this.rainCD = 50; this.sRainDist = 0;
+    this.rainKills = 0; this.seenDay = true; this.seenNight = false; this.seenRain = false;
 
     this.modesPlayed.add(this.mode);
     try { const mp = localStorage.getItem('neon-spy-modes'); if (mp) JSON.parse(mp).forEach((m: string) => this.modesPlayed.add(m)); } catch {}
@@ -849,9 +952,12 @@ export class GameSystem extends createSystem({
     for (const ro of this.roadObjs) this._scene.remove(ro.mesh);
     for (const d of this.decoys) this.entG.remove(d.mesh);
     for (const ew of this.empWaves) this._scene.remove(ew.mesh);
+    if (this.weaponsTruck) { this.entG.remove(this.weaponsTruck.mesh); this.weaponsTruck = null; }
+    for (const jr of this.jumpRamps) this.entG.remove(jr.mesh);
+    for (const rd of this.rainDrops) this._scene.remove(rd.mesh);
     this.enemies = []; this.civs = []; this.bullets = []; this.pups = []; this.oils = []; this.parts = [];
     this.smokes = []; this.hazards = []; this.popups = []; this.trails = []; this.mines = []; this.roadObjs = [];
-    this.decoys = []; this.empWaves = [];
+    this.decoys = []; this.empWaves = []; this.jumpRamps = []; this.rainDrops = []; this.isRaining = false;
   }
 
   private pauseG() { this.gState = 'paused'; this.showP('pause'); }
@@ -881,10 +987,14 @@ export class GameSystem extends createSystem({
     if (this.career.perfectWaves >= 10) this.unlock('perfect-10');
     if (this.wave >= 5 && this.sCivHits === 0) this.unlock('clean-op');
     if (this.wave >= 5 && this.weaponLvl === 0) this.unlock('no-weapon-wave5');
+    if (this.wave >= 75) this.unlock('wave-75');
+    this.career.totalRainDist += this.sRainDist;
+    if (this.career.totalRainDist >= 5000) this.unlock('total-rain-5k');
     this.st(this.resDoc, 'result-score', `Score: ${this.score}`); this.st(this.resDoc, 'result-wave', `Wave: ${this.wave}`);
     this.st(this.resDoc, 'result-distance', `Distance: ${Math.floor(this.dist)}m`); this.st(this.resDoc, 'result-combo', `Max Combo: ${this.maxCombo}x`);
     this.st(this.resDoc, 'result-kills', `Kills: ${this.sKills}`);
     this.st(this.resDoc, 'result-weapon', `Weapon: Lv${this.weaponLvl}`);
+    this.st(this.resDoc, 'result-extra', `Docks:${this.sDocks} Jumps:${this.sJumps} Missions:${this.sMissionsCompleted}`);
     this.st(this.resDoc, 'result-best', this.score >= this.career.highScore ? 'NEW HIGH SCORE!' : `Best: ${this.career.highScore}`);
     this.showP('results');
   }
@@ -1020,8 +1130,118 @@ export class GameSystem extends createSystem({
     }
     // Recharge gadgets periodically
     if (this.wave % 5 === 0 && this.waveT < dt * 2) { this.empCharges = Math.min(3, this.empCharges + 1); this.decoyCharges = Math.min(4, this.decoyCharges + 1); }
+    // Weapons Truck system
+    this.truckCD -= dt;
+    if (this.truckCD <= 0 && !this.weaponsTruck && this.wave >= 2) {
+      this.spawnWeaponsTruck();
+      this.truckCD = 45 + ri(0, 15);
+    }
+    if (this.weaponsTruck && this.weaponsTruck.active) {
+      const truck = this.weaponsTruck;
+      // Truck drives forward to match player speed, then cruises alongside
+      const targetZ = PLAYER_Z + 8;
+      if (truck.z < targetZ) {
+        truck.z += (spd + 8) * dt;
+      } else {
+        truck.z -= (spd * 0.01) * dt; // Slight drift forward
+      }
+      truck.mesh.position.z = truck.z;
+      // Emblem pulse
+      const emblem = truck.mesh.children[4];
+      if (emblem) (emblem as Mesh).material = new MeshBasicMaterial({ color: SCHEMES[this.cIdx].powerup, transparent: true, opacity: 0.4 + Math.sin(time * 4) * 0.2 });
+      // Check if player drives into truck
+      if (!truck.docked && Math.abs(this.pX - truck.x) < 1.5 && Math.abs(PLAYER_Z - truck.z) < 3.5 && !this.isAirborne) {
+        truck.docked = true; truck.dockTimer = 3;
+        sfxDock();
+        // Rewards: weapon upgrade, shield, gadget recharge
+        if (this.weaponLvl >= 2) {
+          // Already max — bonus score
+          this.score += 500 * this.combo;
+          this.addPopup(this.pX, PLAYER_Z + 2, 500 * this.combo);
+          this.unlock('dock-full-weapon');
+        } else {
+          this.weaponLvl = Math.min(2, this.weaponLvl + 1);
+          if (this.weaponLvl >= 1) this.unlock('weapon-spread');
+          if (this.weaponLvl >= 2) this.unlock('weapon-laser');
+        }
+        this.pShield = true; this.shieldT = 8;
+        (this.shieldM.material as MeshBasicMaterial).opacity = 0.2;
+        this.empCharges = Math.min(3, this.empCharges + 1);
+        this.decoyCharges = Math.min(4, this.decoyCharges + 1);
+        this.spawnParts(truck.x, 1, truck.z, '#0088ff', 20);
+        this.sDocks++; this.career.totalDocks++;
+        this.unlock('truck-dock');
+        if (this.sDocks >= 3) this.unlock('truck-dock-3');
+        if (this.sDocks >= 5) this.unlock('truck-dock-5');
+        if (this.career.totalDocks >= 20) this.unlock('total-docks-20');
+        this.saveData();
+      }
+      // Docked: truck drives away after timer
+      if (truck.docked) {
+        truck.dockTimer -= dt;
+        if (truck.dockTimer <= 0) { truck.active = false; }
+      }
+      // Truck leaves if too far behind or timed out
+      if (truck.z < PLAYER_Z - 30 || (truck.z > PLAYER_Z + 80)) { truck.active = false; }
+      if (!truck.active) { this.entG.remove(truck.mesh); this.weaponsTruck = null; }
+    }
+    // Jump Ramp system
+    this.rampCD -= dt;
+    if (this.rampCD <= 0 && this.wave >= 3) {
+      this.jumpRamps.push(this.mkJumpRamp(ri(0, LANE_COUNT - 1), PLAYER_Z + 75));
+      this.rampCD = rf(10, 18);
+    }
+    // Airborne state
+    if (this.isAirborne) {
+      this.airT -= dt;
+      const airProg = 1 - (this.airT / 1.2);
+      this.airY = Math.sin(airProg * Math.PI) * 3;
+      this.pGroup.position.y = this.airY;
+      if (this.airT <= 0) {
+        this.isAirborne = false; this.airT = 0; this.airY = 0;
+        this.pGroup.position.y = 0;
+        sfxLand();
+        this.triggerShake(0.06, 0.15);
+        // Check if jumped over any mines
+        for (const m of this.mines) {
+          if (!m.dead && Math.abs(this.pX - m.x) < 1.0 && Math.abs(PLAYER_Z - m.z) < 2) {
+            this.unlock('jump-dodge-mine');
+            this.sMinesDodged++;
+          }
+        }
+      }
+    }
+    // Rain weather system
+    this.rainCD -= dt;
+    if (!this.isRaining && this.rainCD <= 0 && this.wave >= 4) {
+      this.startRain();
+      this.rainTimer = rf(25, 40);
+      this.rainCD = rf(60, 90);
+    }
+    if (this.isRaining) {
+      this.rainTimer -= dt;
+      this.sRainDist += spd * dt;
+      if (this.sRainDist >= 500) this.unlock('rain-500m');
+      if (this.rainTimer <= 0) this.stopRain();
+      // Update rain drops
+      for (const r of this.rainDrops) {
+        r.mesh.position.y -= r.vel * dt;
+        if (r.mesh.position.y < 0) {
+          r.mesh.position.y = rf(10, 16);
+          r.mesh.position.x = rf(-20, 20);
+          r.mesh.position.z = rf(PLAYER_Z - 15, PLAYER_Z + 60);
+        }
+      }
+      // Rain visibility reduction
+      const f = this._scene.fog as FogExp2;
+      if (f) f.density = Math.max(f.density, 0.018);
+    }
+    // All-weather achievement check
+    if (!this.isNight && !this.isRaining) this.seenDay = true;
+    if (this.isNight) this.seenNight = true;
+    if (this.seenDay && this.seenNight && this.seenRain) this.unlock('all-weather');
     // Update all entities
-    this.updEnemies(dt, spd, time); this.updCivs(dt, spd); this.updBullets(dt); this.updPUs(dt, spd); this.updOils(dt, spd); this.updSmokes(dt, spd); this.updParts(dt); this.updPopups(dt); this.updTrails(dt); this.updHazards(dt, spd); this.updMines(dt, spd); this.updRoadObjs(dt, spd); this.updDecoys(dt, spd, time); this.updEMPWaves(dt); this.checkColl(time);
+    this.updEnemies(dt, spd, time); this.updCivs(dt, spd); this.updBullets(dt); this.updPUs(dt, spd); this.updOils(dt, spd); this.updSmokes(dt, spd); this.updParts(dt); this.updPopups(dt); this.updTrails(dt); this.updHazards(dt, spd); this.updMines(dt, spd); this.updRoadObjs(dt, spd); this.updDecoys(dt, spd, time); this.updEMPWaves(dt); this.updRamps(dt, spd); this.checkColl(time);
     this.updHUD(); this.updRadar();
     this.pGroup.position.x = this.pX;
     // Headlight flicker (handled in night mode section above for night, basic here for day)
@@ -1178,6 +1398,26 @@ export class GameSystem extends createSystem({
     }
     this.empWaves = this.empWaves.filter(e => { if (e.dead) { this._scene.remove(e.mesh); return false; } return true; });
   }
+  private updRamps(dt: number, ss: number) {
+    for (const r of this.jumpRamps) {
+      if (r.dead) continue;
+      r.z -= ss * dt; r.mesh.position.z = r.z;
+      // Check player collision with ramp (only if not already airborne)
+      if (!this.isAirborne && Math.abs(this.pX - r.x) < LANE_WIDTH * 0.5 && Math.abs(PLAYER_Z - r.z) < 1.5) {
+        r.dead = true;
+        this.isAirborne = true; this.airT = 1.2;
+        sfxJump();
+        this.sJumps++; this.career.totalJumps++;
+        this.unlock('jump-1');
+        if (this.sJumps >= 5) this.unlock('jump-5');
+        if (this.sJumps >= 10) this.unlock('jump-10');
+        if (this.career.totalJumps >= 50) this.unlock('total-jumps-50');
+        this.spawnParts(this.pX, 0.3, PLAYER_Z, SCHEMES[this.cIdx].powerup, 8);
+      }
+      if (r.z < PLAYER_Z - 10) r.dead = true;
+    }
+    this.jumpRamps = this.jumpRamps.filter(r => { if (r.dead) { this.entG.remove(r.mesh); return false; } return true; });
+  }
   private updParts(dt: number) { for (const p of this.parts) { p.vel.y -= 9.8 * dt; p.mesh.position.add(p.vel.clone().multiplyScalar(dt)); p.life -= dt; (p.mesh.material as MeshBasicMaterial).opacity = Math.max(0, p.life / p.maxLife); } this.parts = this.parts.filter(p => { if (p.life <= 0) { this._scene.remove(p.mesh); return false; } return true; }); }
   private updPopups(dt: number) { for (const p of this.popups) { p.y += dt * 2; p.mesh.position.y = p.y; p.life -= dt; (p.mesh.material as MeshBasicMaterial).opacity = Math.max(0, p.life); } this.popups = this.popups.filter(p => { if (p.life <= 0) { this._scene.remove(p.mesh); return false; } return true; }); }
   private updTrails(dt: number) { for (const t of this.trails) { t.life -= dt; (t.mesh.material as MeshBasicMaterial).opacity = Math.max(0, t.life * 0.8); } this.trails = this.trails.filter(t => { if (t.life <= 0) { this._scene.remove(t.mesh); return false; } return true; }); }
@@ -1186,7 +1426,9 @@ export class GameSystem extends createSystem({
   private checkColl(time: number) {
     const px = this.pX, pz = PLAYER_Z;
     // Player bullets vs enemies
-    for (const b of this.bullets) { if (b.dead || !b.fromPlayer) continue; for (const e of this.enemies) { if (e.dead || e.dying) continue; const hw = e.type === 'armored' ? 1.8 : e.type === 'van' ? 1.4 : e.type === 'helicopter' ? 1.0 : e.type === 'interceptor' ? 0.8 : 0.7; const hd = e.type === 'armored' ? 3.5 : e.type === 'van' ? 2.8 : 2.2; if (Math.abs(b.x - e.x) < hw && Math.abs(b.z - e.z) < hd) { b.dead = true; e.hp--; sfxHit(); if (e.hp <= 0) { e.dying = true; e.deathSpin = 0; let pts: number; if (e.type === 'armored') pts = 1000; else if (e.type === 'helicopter') pts = 300; else if (e.type === 'motorcycle') pts = 150; else if (e.type === 'van') pts = 250; else if (e.type === 'interceptor') pts = 350; else pts = 100; const gained = pts * this.combo; this.score += gained; this.addPopup(e.x, e.z, gained); this.spawnParts(e.x, 0.5, e.z, SCHEMES[this.cIdx].enemy, e.type === 'armored' ? 25 : 15); sfxExplosion(); if (e.type === 'armored') this.triggerShake(0.15, 0.3); this.sKills++; this.career.totalKills++; this.onEnemyKill(e.type, false); this.recentKillTimes.push(time); this.recentKillTimes = this.recentKillTimes.filter(t => time - t < 1); if (this.recentKillTimes.length >= 3) this.unlock('multi-kill-3'); this.combo = Math.min(8, this.combo + 1); this.comboT = COMBO_DECAY; if (this.combo > this.maxCombo) this.maxCombo = this.combo; if (this.combo >= 3) { this.unlock('combo-3'); sfxCombo(); } if (this.combo >= 5) this.unlock('combo-5'); if (this.combo >= 8) this.unlock('combo-8'); this.unlock('first-kill'); if (this.sKills >= 10) this.unlock('kills-10'); if (this.sKills >= 25) this.unlock('kills-25'); if (this.sKills >= 50) this.unlock('kills-50'); if (this.sKills >= 100) this.unlock('kills-100'); if (this.sKills >= 200) this.unlock('kills-200'); if (this.sKills >= 300) this.unlock('kills-300'); if (e.type === 'armored') { this.career.totalBoss++; this.unlock('boss-kill'); if (this.career.totalBoss >= 5) this.unlock('boss-5'); } if (this.spdBoost) this.unlock('speed-kill'); for (const sm of this.smokes) { if (!sm.dead && Math.abs(e.x - sm.x) < 2 && Math.abs(e.z - sm.z) < 3) { this.unlock('smoke-kill'); break; } } } else { this.spawnParts(b.x, 0.5, b.z, '#ffffff', 4); } break; } } }
+    for (const b of this.bullets) { if (b.dead || !b.fromPlayer) continue; for (const e of this.enemies) { if (e.dead || e.dying) continue; const hw = e.type === 'armored' ? 1.8 : e.type === 'van' ? 1.4 : e.type === 'helicopter' ? 1.0 : e.type === 'interceptor' ? 0.8 : 0.7; const hd = e.type === 'armored' ? 3.5 : e.type === 'van' ? 2.8 : 2.2; if (Math.abs(b.x - e.x) < hw && Math.abs(b.z - e.z) < hd) { b.dead = true; e.hp--; sfxHit(); if (e.hp <= 0) { e.dying = true; e.deathSpin = 0; let pts: number; if (e.type === 'armored') pts = 1000; else if (e.type === 'helicopter') pts = 300; else if (e.type === 'motorcycle') pts = 150; else if (e.type === 'van') pts = 250; else if (e.type === 'interceptor') pts = 350; else pts = 100; const gained = pts * this.combo; this.score += gained; this.addPopup(e.x, e.z, gained); this.spawnParts(e.x, 0.5, e.z, SCHEMES[this.cIdx].enemy, e.type === 'armored' ? 25 : 15); sfxExplosion(); if (e.type === 'armored') this.triggerShake(0.15, 0.3); this.sKills++; this.career.totalKills++; this.onEnemyKill(e.type, false); if (this.isAirborne) this.unlock('jump-kill'); this.recentKillTimes.push(time); this.recentKillTimes = this.recentKillTimes.filter(t => time - t < 1); if (this.recentKillTimes.length >= 3) this.unlock('multi-kill-3'); this.combo = Math.min(8, this.combo + 1); this.comboT = COMBO_DECAY; if (this.combo > this.maxCombo) this.maxCombo = this.combo; if (this.combo >= 3) { this.unlock('combo-3'); sfxCombo(); } if (this.combo >= 5) this.unlock('combo-5'); if (this.combo >= 8) this.unlock('combo-8'); this.unlock('first-kill'); if (this.sKills >= 10) this.unlock('kills-10'); if (this.sKills >= 25) this.unlock('kills-25'); if (this.sKills >= 50) this.unlock('kills-50'); if (this.sKills >= 100) this.unlock('kills-100'); if (this.sKills >= 200) this.unlock('kills-200'); if (this.sKills >= 300) this.unlock('kills-300'); if (e.type === 'armored') { this.career.totalBoss++; this.unlock('boss-kill'); if (this.career.totalBoss >= 5) this.unlock('boss-5'); if (this.isRaining) this.unlock('rain-boss'); } if (this.spdBoost) this.unlock('speed-kill'); if (this.isRaining) { this.rainKills++; if (this.rainKills >= 10) this.unlock('rain-kill-10'); } for (const sm of this.smokes) { if (!sm.dead && Math.abs(e.x - sm.x) < 2 && Math.abs(e.z - sm.z) < 3) { this.unlock('smoke-kill'); break; } } } else { this.spawnParts(b.x, 0.5, b.z, '#ffffff', 4); } break; } } }
+    // Skip body collisions when airborne
+    if (!this.isAirborne) {
     // Enemy bullets vs player
     if (this.invT <= 0) { for (const b of this.bullets) { if (b.dead || b.fromPlayer) continue; if (Math.abs(b.x - px) < 0.8 && Math.abs(b.z - pz) < 1.5) { b.dead = true; if (this.pShield) { this.pShield = false; (this.shieldM.material as MeshBasicMaterial).opacity = 0; sfxShield(); this.spawnParts(px, 0.5, pz, SCHEMES[this.cIdx].powerup, 10); } else { this.pHit(); } } } }
     // Enemy body vs player
@@ -1197,6 +1439,7 @@ export class GameSystem extends createSystem({
     if (this.invT <= 0) { for (const h of this.hazards) { if (h.dead) continue; const hr = h.type === 'barrier' ? 1.2 : 0.7; if (Math.abs(px - h.x) < hr && Math.abs(pz - h.z) < 1.5) { h.dead = true; sfxHazard(); this.spawnParts(h.x, 0.3, h.z, '#ff6600', 8); if (this.pShield) { this.pShield = false; (this.shieldM.material as MeshBasicMaterial).opacity = 0; } else { this.pHit(); } } } }
     // Mine collision
     if (this.invT <= 0) { for (const m of this.mines) { if (m.dead) continue; if (Math.abs(px - m.x) < 0.7 && Math.abs(pz - m.z) < 0.7) { m.dead = true; sfxExplosion(); this.spawnParts(m.x, 0.3, m.z, '#ff2200', 15); this.triggerShake(0.1, 0.2); if (this.pShield) { this.pShield = false; (this.shieldM.material as MeshBasicMaterial).opacity = 0; } else { this.pHit(); } } } }
+    } // end airborne skip
     // Power-up pickup
     for (const pu of this.pups) { if (pu.dead) continue; if (Math.abs(px - pu.x) < 1.2 && Math.abs(pz - pu.z) < 2.2) { pu.dead = true; sfxPowerUp(); this.career.totalPU++; this.puTypes.add(pu.type);
       switch (pu.type) {
@@ -1273,7 +1516,9 @@ export class GameSystem extends createSystem({
     const gadgetStr = `EMP:${this.empCharges} Decoy:${this.decoyCharges}`;
     const heatStr = this.heatLevel > 0 ? ` | Heat:${'!'.repeat(Math.min(7, Math.floor(this.heatLevel)))}` : '';
     const nightStr = this.isNight ? ' | NIGHT' : '';
-    this.st(this.hudDoc, 'gadget-status', gadgetStr + heatStr + nightStr);
+    const rainStr = this.isRaining ? ' | RAIN' : '';
+    const airStr = this.isAirborne ? ' | AIRBORNE' : '';
+    this.st(this.hudDoc, 'gadget-status', gadgetStr + heatStr + nightStr + rainStr + airStr);
     if (this.mode === 'speed') this.st(this.hudDoc, 'mode-info', `Time: ${Math.ceil(120 - this.gTime)}s`);
     else if (this.mode === 'challenge') this.st(this.hudDoc, 'mode-info', `Moves: ${500 - this.moves}`);
     else this.st(this.hudDoc, 'mode-info', '');

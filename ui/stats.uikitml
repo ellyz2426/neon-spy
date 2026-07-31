@@ -19,6 +19,9 @@
       <div name="stat-interceptors" font-size="10" color="#ff0088">Interceptor Kills: 0</div>
       <div name="stat-emps" font-size="10" color="#00ccff">EMPs Used: 0</div>
       <div name="stat-decoys" font-size="10" color="#00ccff">Decoys Deployed: 0</div>
+      <div name="stat-docks" font-size="10" color="#0088ff">Truck Docks: 0</div>
+      <div name="stat-jumps" font-size="10" color="#ffff00">Ramp Jumps: 0</div>
+      <div name="stat-rain" font-size="10" color="#4488ff">Rain Distance: 0m</div>
       <div name="stat-formations" font-size="10" color="#ffaa00">Formations Cleared: 0</div>
     </div>
     <div name="btn-stats-back" font-size="11" color="#ffffff" background-color="#555555" border-radius="10" padding-top="5" padding-bottom="5" padding-left="14" padding-right="14" margin-top="4" cursor="pointer">Back</div>

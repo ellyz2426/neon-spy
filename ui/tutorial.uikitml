@@ -36,6 +36,9 @@
       <div font-size="9" color="#6666ff">Day/Night cycle — night reduces visibility</div>
       <div font-size="9" color="#ff4444">Enemy formations appear at wave 5+</div>
       <div font-size="9" color="#aaaaaa">Watch the radar for threats!</div>
+      <div font-size="9" color="#0088ff">Blue trucks are allies — dock for upgrades!</div>
+      <div font-size="9" color="#ffff00">Hit ramps to jump — invulnerable in air!</div>
+      <div font-size="9" color="#4488ff">Rain reduces visibility — stay sharp!</div>
       <div font-size="9" color="#aaaaaa">Chain kills for combo multiplier</div>
     </div>
     <div name="btn-tutorial-back" font-size="11" color="#ffffff" background-color="#555555" border-radius="10" padding-top="5" padding-bottom="5" padding-left="14" padding-right="14" margin-top="4" cursor="pointer">Back</div>

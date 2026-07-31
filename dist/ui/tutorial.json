@@ -439,13 +439,49 @@
                 "type": "container",
                 "sourceTag": "div",
                 "children": [
+                  "Blue trucks are allies — dock for upgrades!"
+                ],
+                "properties": {
+                  "fontSize": "9",
+                  "color": "#0088ff"
+                },
+                "dataUid": "uid-39"
+              },
+              {
+                "type": "container",
+                "sourceTag": "div",
+                "children": [
+                  "Hit ramps to jump — invulnerable in air!"
+                ],
+                "properties": {
+                  "fontSize": "9",
+                  "color": "#ffff00"
+                },
+                "dataUid": "uid-40"
+              },
+              {
+                "type": "container",
+                "sourceTag": "div",
+                "children": [
+                  "Rain reduces visibility — stay sharp!"
+                ],
+                "properties": {
+                  "fontSize": "9",
+                  "color": "#4488ff"
+                },
+                "dataUid": "uid-41"
+              },
+              {
+                "type": "container",
+                "sourceTag": "div",
+                "children": [
                   "Chain kills for combo multiplier"
                 ],
                 "properties": {
                   "fontSize": "9",
                   "color": "#aaaaaa"
                 },
-                "dataUid": "uid-39"
+                "dataUid": "uid-42"
               }
             ],
             "properties": {
@@ -474,7 +510,7 @@
               "marginTop": "4",
               "cursor": "pointer"
             },
-            "dataUid": "uid-40"
+            "dataUid": "uid-43"
           }
         ],
         "properties": {
@@ -499,7 +535,7 @@
         "column": 0
       },
       "end": {
-        "line": 42,
+        "line": 45,
         "column": 8
       }
     },
@@ -509,7 +545,7 @@
         "column": 2
       },
       "end": {
-        "line": 41,
+        "line": 44,
         "column": 8
       }
     },
@@ -529,7 +565,7 @@
         "column": 4
       },
       "end": {
-        "line": 39,
+        "line": 42,
         "column": 10
       }
     },
@@ -880,16 +916,46 @@
       },
       "end": {
         "line": 38,
-        "column": 79
+        "column": 90
       }
     },
     "uid-40": {
       "start": {
+        "line": 39,
+        "column": 6
+      },
+      "end": {
+        "line": 39,
+        "column": 87
+      }
+    },
+    "uid-41": {
+      "start": {
         "line": 40,
-        "column": 4
+        "column": 6
       },
       "end": {
         "line": 40,
+        "column": 84
+      }
+    },
+    "uid-42": {
+      "start": {
+        "line": 41,
+        "column": 6
+      },
+      "end": {
+        "line": 41,
+        "column": 79
+      }
+    },
+    "uid-43": {
+      "start": {
+        "line": 43,
+        "column": 4
+      },
+      "end": {
+        "line": 43,
         "column": 225
       }
     }
