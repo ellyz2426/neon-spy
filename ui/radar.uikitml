@@ -1,0 +1,12 @@
+<panel>
+  <div background-color="rgba(0,20,0,0.75)" border-radius="10" padding="6" flex-direction="column" gap="2" align-items="center">
+    <div font-size="8" font-weight="bold" color="#00ff44">RADAR</div>
+    <div name="radar-0" font-size="7" color="#ff4444"></div>
+    <div name="radar-1" font-size="7" color="#ff4444"></div>
+    <div name="radar-2" font-size="7" color="#ff4444"></div>
+    <div name="radar-3" font-size="7" color="#ff4444"></div>
+    <div name="radar-4" font-size="7" color="#ffaa00"></div>
+    <div name="radar-5" font-size="7" color="#ffaa00"></div>
+    <div name="radar-count" font-size="7" color="#00ff44"></div>
+  </div>
+</panel>

@@ -14,16 +14,22 @@
       <div font-size="9" color="#aaaaaa">Grip: Oil slick</div>
       <div font-size="9" color="#aaaaaa">A: Smoke screen</div>
       <div font-size="9" color="#aaaaaa">B: Pause</div>
+      <div font-size="10" color="#ffffff" margin-top="4">-- Enemies --</div>
+      <div font-size="9" color="#ff4444">Sedans: Standard enemies</div>
+      <div font-size="9" color="#ff4444">Motorcycles: Fast, no guns</div>
+      <div font-size="9" color="#ff4444">Helicopters: Fly above, 2 HP</div>
+      <div font-size="9" color="#ff6600">Vans: Drop mines behind them</div>
+      <div font-size="9" color="#ff0088">Interceptors: Fast flankers</div>
+      <div font-size="9" color="#ff4444">Armored Boss: Every 5 waves</div>
       <div font-size="10" color="#ffffff" margin-top="4">-- Tips --</div>
       <div font-size="9" color="#33ff33">Green cars are civilians - avoid!</div>
-      <div font-size="9" color="#ff4444">Red vehicles are enemies - destroy!</div>
-      <div font-size="9" color="#ffff00">Yellow vans are power-ups - collect!</div>
-      <div font-size="9" color="#ff00ff">Purple crates upgrade your weapon!</div>
+      <div font-size="9" color="#ffff00">Collect power-ups for upgrades</div>
+      <div font-size="9" color="#ff00ff">Purple crates upgrade weapons</div>
+      <div font-size="9" color="#00ff88">Complete bonus missions for points</div>
       <div font-size="9" color="#aaaaaa">Weapons: Dual - Spread - Laser</div>
       <div font-size="9" color="#aaaaaa">Smoke screens block enemy fire</div>
-      <div font-size="9" color="#aaaaaa">Watch out for road hazards!</div>
+      <div font-size="9" color="#aaaaaa">Watch the radar for threats!</div>
       <div font-size="9" color="#aaaaaa">Chain kills for combo multiplier</div>
-      <div font-size="9" color="#aaaaaa">Boss armored trucks every 5 waves</div>
     </div>
     <div name="btn-tutorial-back" font-size="11" color="#ffffff" background-color="#555555" border-radius="10" padding-top="5" padding-bottom="5" padding-left="14" padding-right="14" margin-top="4" cursor="pointer">Back</div>
   </div>

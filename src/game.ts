@@ -32,7 +32,7 @@ const SCHEMES: ColorScheme[] = [
   { name: 'Gold',    primary: '#ffcc00', accent: '#00ccff', bg: '#111100', enemy: '#ff3366', civilian: '#66ff66', powerup: '#ff9900' },
 ];
 
-interface EnemyCar { mesh: Group; x: number; z: number; speed: number; type: 'sedan'|'motorcycle'|'helicopter'|'armored'; hp: number; fireTimer: number; dead: boolean; targetLane: number; laneChangeT: number; deathSpin: number; dying: boolean; }
+interface EnemyCar { mesh: Group; x: number; z: number; speed: number; type: 'sedan'|'motorcycle'|'helicopter'|'armored'|'van'|'interceptor'; hp: number; fireTimer: number; dead: boolean; targetLane: number; laneChangeT: number; deathSpin: number; dying: boolean; mineCD: number; }
 interface CivilianCar { mesh: Group; x: number; z: number; speed: number; dead: boolean; }
 interface Bullet { mesh: Mesh; x: number; z: number; fromPlayer: boolean; speed: number; dead: boolean; dx: number; }
 interface PowerUpObj { mesh: Group; x: number; z: number; type: 'missile'|'oilslick'|'shield'|'speed'|'rapid'|'weapon'; dead: boolean; rotY: number; }
@@ -41,15 +41,18 @@ interface SmokeCloud { mesh: Group; x: number; z: number; timer: number; dead: b
 interface Particle { mesh: Mesh; vel: Vector3; life: number; maxLife: number; }
 interface ScorePopup { mesh: Mesh; y: number; life: number; }
 interface RoadHazard { mesh: Group; x: number; z: number; type: 'pothole'|'barrier'|'cone'; dead: boolean; }
-interface RoadSeg { mesh: Group; z: number; isBridge: boolean; }
+interface Mine { mesh: Mesh; x: number; z: number; timer: number; dead: boolean; }
+interface RoadSeg { mesh: Group; z: number; isBridge: boolean; isTunnel: boolean; }
 interface Achievement { id: string; name: string; desc: string; unlocked: boolean; }
 interface TrailPart { mesh: Mesh; life: number; }
+interface RoadsideObj { mesh: Group; z: number; side: number; }
+interface Mission { type: 'kill_count'|'distance_nodmg'|'kill_oil'|'kill_timed'|'combo_target'; desc: string; target: number; progress: number; timer: number; active: boolean; }
 
 const ROAD_WIDTH = 12; const LANE_COUNT = 5; const LANE_WIDTH = ROAD_WIDTH / LANE_COUNT;
 const ROAD_SEG_LEN = 40; const ROAD_VIS = 8; const PLAYER_Z = -8;
 const SCROLL_SPD = 18; const PLAYER_SPD = 6; const BULLET_SPD = 40;
 const ENEMY_FIRE_RATE = 2.5; const SPAWN_INT = 1.2; const PU_INT = 8; const CIV_INT = 4; const COMBO_DECAY = 3;
-const HAZARD_INT = 6; const SMOKE_DUR = 4; const BRIDGE_CHANCE = 0.12;
+const HAZARD_INT = 6; const SMOKE_DUR = 4; const BRIDGE_CHANCE = 0.12; const TUNNEL_CHANCE = 0.08;
 
 // Audio
 let actx: AudioContext | null = null;
@@ -76,10 +79,31 @@ function sfxAch() { tone(880, 0.1, 'sine', 0.1); setTimeout(() => tone(1100, 0.1
 function sfxGO() { tone(440, 0.2, 'sine', 0.1); setTimeout(() => tone(330, 0.2, 'sine', 0.1), 200); setTimeout(() => tone(220, 0.3, 'sine', 0.1), 400); }
 function sfxCombo() { tone(660, 0.08, 'sine', 0.08); }
 function sfxHazard() { tone(180, 0.15, 'sawtooth', 0.08); tone(120, 0.2, 'square', 0.06); }
+function sfxMine() { tone(300, 0.1, 'sawtooth', 0.06); tone(250, 0.15, 'square', 0.05); }
+function sfxMissionComplete() { tone(660, 0.1, 'sine', 0.12); setTimeout(() => tone(880, 0.1, 'sine', 0.12), 80); setTimeout(() => tone(1100, 0.1, 'sine', 0.12), 160); setTimeout(() => tone(1320, 0.15, 'sine', 0.14), 240); setTimeout(() => tone(1540, 0.2, 'sine', 0.12), 320); }
 
-let mosc1: OscillatorNode|null = null, mosc2: OscillatorNode|null = null, mgain: GainNode|null = null;
-function startMusic() { try { const c = ensureAudio(); mgain = c.createGain(); mgain.gain.value = 0.03; mgain.connect(c.destination); mosc1 = c.createOscillator(); mosc1.type = 'sine'; mosc1.frequency.value = 55; mosc1.connect(mgain); mosc1.start(); mosc2 = c.createOscillator(); mosc2.type = 'triangle'; mosc2.frequency.value = 82.5; mosc2.connect(mgain); mosc2.start(); } catch {} }
-function updateMusic(w: number) { if (mosc1) mosc1.frequency.value = 55 + (w % 8) * 5; if (mosc2) mosc2.frequency.value = 82.5 + (w % 8) * 3; }
+let mosc1: OscillatorNode|null = null, mosc2: OscillatorNode|null = null, mosc3: OscillatorNode|null = null;
+let mgain: GainNode|null = null, mgain2: GainNode|null = null, mgain3: GainNode|null = null;
+function startMusic() {
+  try {
+    const c = ensureAudio();
+    mgain = c.createGain(); mgain.gain.value = 0.03; mgain.connect(c.destination);
+    mosc1 = c.createOscillator(); mosc1.type = 'sine'; mosc1.frequency.value = 55; mosc1.connect(mgain); mosc1.start();
+    mgain2 = c.createGain(); mgain2.gain.value = 0.02; mgain2.connect(c.destination);
+    mosc2 = c.createOscillator(); mosc2.type = 'triangle'; mosc2.frequency.value = 82.5; mosc2.connect(mgain2); mosc2.start();
+    mgain3 = c.createGain(); mgain3.gain.value = 0.0; mgain3.connect(c.destination);
+    mosc3 = c.createOscillator(); mosc3.type = 'sawtooth'; mosc3.frequency.value = 40; mosc3.connect(mgain3); mosc3.start();
+  } catch {}
+}
+function updateMusic(w: number, intensity: number, isBoss: boolean) {
+  if (mosc1) mosc1.frequency.value = 55 + (w % 8) * 5 + intensity * 10;
+  if (mosc2) mosc2.frequency.value = 82.5 + (w % 8) * 3 + intensity * 5;
+  if (mgain) mgain.gain.value = 0.03 + intensity * 0.015;
+  if (mgain2) mgain2.gain.value = 0.02 + intensity * 0.01;
+  // Bass oscillator for bosses / high intensity
+  if (mosc3) mosc3.frequency.value = isBoss ? 35 : 40 + w * 2;
+  if (mgain3) mgain3.gain.value = isBoss ? 0.04 : intensity * 0.02;
+}
 
 // Helpers
 function laneX(l: number) { return (l - 2) * LANE_WIDTH; }
@@ -97,6 +121,7 @@ export class GameSystem extends createSystem({
   achP:     { required: [PanelUI, PanelDocument], where: [eq(PanelUI, 'config', './ui/achievements.json')] },
   statsP:   { required: [PanelUI, PanelDocument], where: [eq(PanelUI, 'config', './ui/stats.json')] },
   tutP:     { required: [PanelUI, PanelDocument], where: [eq(PanelUI, 'config', './ui/tutorial.json')] },
+  radarP:   { required: [PanelUI, PanelDocument], where: [eq(PanelUI, 'config', './ui/radar.json')] },
 }) {
   private _scene!: Scene;
   private gState: 'menu'|'playing'|'paused'|'gameover' = 'menu';
@@ -107,13 +132,14 @@ export class GameSystem extends createSystem({
   private pGroup!: Group; private pX = 0; private pShield = false; private shieldT = 0; private shieldM!: Mesh;
   private rapidF = false; private rapidT = 0; private spdBoost = false; private spdT = 0;
   private fireT = 0; private fireCD = 0.18; private invT = 0;
-  private weaponLvl = 0; // 0=dual, 1=spread, 2=laser
+  private weaponLvl = 0;
   private headlightL!: Mesh; private headlightR!: Mesh;
   private enemies: EnemyCar[] = []; private civs: CivilianCar[] = []; private bullets: Bullet[] = [];
   private pups: PowerUpObj[] = []; private oils: OilSlick[] = []; private smokes: SmokeCloud[] = [];
   private parts: Particle[] = []; private popups: ScorePopup[] = []; private trails: TrailPart[] = [];
-  private hazards: RoadHazard[] = [];
+  private hazards: RoadHazard[] = []; private mines: Mine[] = [];
   private roadSegs: RoadSeg[] = []; private orbs: Mesh[] = [];
+  private roadObjs: RoadsideObj[] = [];
   private spawnT = 0; private puT = 0; private civT = 0; private waveT = 0; private hazT = 0; private bossOut = false;
   private envG!: Group; private roadG!: Group; private entG!: Group;
   private keys = new Set<string>(); private gpad = { axes: { x: 0, y: 0 }, trigger: false, grip: false, a: false, b: false };
@@ -123,13 +149,23 @@ export class GameSystem extends createSystem({
   private pauseDoc: UIKitDocument|null = null; private resDoc: UIKitDocument|null = null;
   private setDoc: UIKitDocument|null = null; private achDoc: UIKitDocument|null = null;
   private statDoc: UIKitDocument|null = null; private tutDoc: UIKitDocument|null = null;
+  private radarDoc: UIKitDocument|null = null;
   private achs: Achievement[] = []; private achPg = 0;
-  private career = { gamesPlayed: 0, totalScore: 0, highScore: 0, totalKills: 0, totalDist: 0, totalPU: 0, totalOil: 0, totalBoss: 0, bestWave: 1, bestCombo: 1, totalSmokes: 0, totalHazards: 0, maxWeapon: 0, bridgesCrossed: 0, perfectWaves: 0 };
+  private career = { gamesPlayed: 0, totalScore: 0, highScore: 0, totalKills: 0, totalDist: 0, totalPU: 0, totalOil: 0, totalBoss: 0, bestWave: 1, bestCombo: 1, totalSmokes: 0, totalHazards: 0, maxWeapon: 0, bridgesCrossed: 0, perfectWaves: 0, totalMissions: 0, totalVanKills: 0, totalInterceptorKills: 0 };
   private sKills = 0; private sOils = 0; private sCivHits = 0; private sSmokes = 0; private sHazardsDodged = 0;
   private puTypes = new Set<string>(); private oilCD = 0; private smokeCD = 0;
   private waveNoDmg = true; private sPerfectWaves = 0; private sBridges = 0;
   private shakeT = 0; private shakeStr = 0;
   private camBase = new Vector3();
+  // New R3 state
+  private sVanKills = 0; private sInterceptorKills = 0; private sMinesDodged = 0;
+  private mission: Mission|null = null; private missionCD = 0; private sMissionsCompleted = 0;
+  private missionKillsAtStart = 0; private missionDistAtStart = 0; private missionNoDmg = true;
+  private musicIntensity = 0; private roadObjT = 0;
+  private killTypesThisGame = new Set<string>();
+  private comboMaxT = 0; private consecutivePerfect = 0;
+  private sLaserKills = 0;
+  private tunnelsPassed = 0;
 
   private st(doc: UIKitDocument|null, id: string, text: string) { if (!doc) return; (doc.getElementById(id) as UIKit.Text|undefined)?.setProperties({ text }); }
   private sv(e: Entity, v: boolean) { try { const o = (e as any).object3D; if (o) { const s = v ? 3 : 0; o.scale.set(s, s, s); } } catch {} }
@@ -143,8 +179,10 @@ export class GameSystem extends createSystem({
   private loadData() { try { const s = localStorage.getItem('neon-spy-career'); if (s) this.career = { ...this.career, ...JSON.parse(s) }; const a = localStorage.getItem('neon-spy-achs'); if (a) { (JSON.parse(a) as string[]).forEach(id => { const x = this.achs.find(v => v.id === id); if (x) x.unlocked = true; }); } const c = localStorage.getItem('neon-spy-color'); if (c) this.cIdx = parseInt(c) || 0; } catch {} }
   private saveData() { try { localStorage.setItem('neon-spy-career', JSON.stringify(this.career)); localStorage.setItem('neon-spy-achs', JSON.stringify(this.achs.filter(a => a.unlocked).map(a => a.id))); localStorage.setItem('neon-spy-color', String(this.cIdx)); } catch {} }
 
+
   private initAchs() {
     this.achs = [
+      // Original 30
       { id: 'first-kill', name: 'First Blood', desc: 'Destroy your first enemy', unlocked: false },
       { id: 'kills-10', name: 'Agent 10', desc: 'Destroy 10 enemies in one game', unlocked: false },
       { id: 'kills-25', name: 'Double Agent', desc: 'Destroy 25 enemies in one game', unlocked: false },
@@ -175,7 +213,7 @@ export class GameSystem extends createSystem({
       { id: 'dist-5k', name: 'Long Haul', desc: 'Travel 5,000 meters', unlocked: false },
       { id: 'games-10', name: 'Regular', desc: 'Play 10 games', unlocked: false },
       { id: 'games-50', name: 'Dedicated', desc: 'Play 50 games', unlocked: false },
-      // New achievements
+      // Round 2 achievements (20)
       { id: 'weapon-spread', name: 'Spread Eagle', desc: 'Upgrade to spread shot', unlocked: false },
       { id: 'weapon-laser', name: 'Laser Focus', desc: 'Upgrade to laser beam', unlocked: false },
       { id: 'weapon-max-3', name: 'Fully Armed', desc: 'Reach max weapon level 3 times', unlocked: false },
@@ -196,6 +234,29 @@ export class GameSystem extends createSystem({
       { id: 'oil-boss', name: 'Slick Move', desc: 'Destroy a boss with an oil slick', unlocked: false },
       { id: 'wave-30', name: 'Immortal', desc: 'Reach wave 30', unlocked: false },
       { id: 'all-modes', name: 'Versatile', desc: 'Play all 4 game modes', unlocked: false },
+      // Round 3 achievements (22 new — total 72)
+      { id: 'van-kill', name: 'Van Hunter', desc: 'Destroy a van', unlocked: false },
+      { id: 'van-kill-5', name: 'Van Exterminator', desc: 'Destroy 5 vans in one game', unlocked: false },
+      { id: 'interceptor-kill', name: 'Intercepted', desc: 'Destroy an interceptor', unlocked: false },
+      { id: 'interceptor-5', name: 'Counter Intel', desc: 'Destroy 5 interceptors in one game', unlocked: false },
+      { id: 'mine-dodge-5', name: 'Minesweeper', desc: 'Dodge 5 mines in one game', unlocked: false },
+      { id: 'mine-dodge-15', name: 'Mine Expert', desc: 'Dodge 15 mines in one game', unlocked: false },
+      { id: 'mission-1', name: 'Mission Possible', desc: 'Complete your first mission', unlocked: false },
+      { id: 'mission-3', name: 'Field Operative', desc: 'Complete 3 missions in one game', unlocked: false },
+      { id: 'mission-5', name: 'Mission Specialist', desc: 'Complete 5 missions in one game', unlocked: false },
+      { id: 'mission-total-10', name: 'Mission Master', desc: 'Complete 10 missions total', unlocked: false },
+      { id: 'wave-40', name: 'Unstoppable', desc: 'Reach wave 40', unlocked: false },
+      { id: 'wave-50', name: 'Infinite Agent', desc: 'Reach wave 50', unlocked: false },
+      { id: 'kills-300', name: 'Obliterator', desc: 'Destroy 300 enemies in one game', unlocked: false },
+      { id: 'bridge-5-game', name: 'Bridge Runner', desc: 'Cross 5 bridges in one game', unlocked: false },
+      { id: 'all-enemy-types', name: 'Diverse Kills', desc: 'Kill all 6 enemy types in one game', unlocked: false },
+      { id: 'laser-kills-20', name: 'Laser Master', desc: 'Kill 20 enemies with laser in one game', unlocked: false },
+      { id: 'no-weapon-wave5', name: 'Barehanded', desc: 'Reach wave 5 with base weapon only', unlocked: false },
+      { id: 'score-500k', name: 'Legend', desc: 'Score 500,000 points', unlocked: false },
+      { id: 'combo-streak', name: 'Combo Streak', desc: 'Maintain 8x combo for 8 seconds', unlocked: false },
+      { id: 'consecutive-perfect-5', name: 'Flawless Streak', desc: 'Get 5 consecutive perfect waves', unlocked: false },
+      { id: 'tunnel-3', name: 'Tunnel Rat', desc: 'Pass through 3 tunnels', unlocked: false },
+      { id: 'total-dist-50k', name: 'World Tour', desc: 'Travel 50,000 meters total', unlocked: false },
     ];
     try { const a = localStorage.getItem('neon-spy-achs'); if (a) { (JSON.parse(a) as string[]).forEach(id => { const x = this.achs.find(v => v.id === id); if (x) x.unlocked = true; }); } } catch {}
   }
@@ -210,6 +271,7 @@ export class GameSystem extends createSystem({
     m.position.set(x, 2, z); this._scene.add(m);
     this.popups.push({ mesh: m, y: 2, life: 1.0 });
   }
+
 
   private buildEnv() {
     const sc = SCHEMES[this.cIdx];
@@ -232,12 +294,12 @@ export class GameSystem extends createSystem({
     this.entG = new Group(); this._scene.add(this.entG);
   }
 
-  private createRoad() { for (let i = 0; i < ROAD_VIS; i++) this.addRoadSeg(i * ROAD_SEG_LEN, false); }
+  private createRoad() { for (let i = 0; i < ROAD_VIS; i++) this.addRoadSeg(i * ROAD_SEG_LEN, false, false); }
 
-  private addRoadSeg(z: number, bridge: boolean) {
+  private addRoadSeg(z: number, bridge: boolean, tunnel: boolean) {
     const sc = SCHEMES[this.cIdx]; const seg = new Group();
-    const rdColor = bridge ? sc.accent : sc.primary;
-    const rdOp = bridge ? 0.08 : 0.04;
+    const rdColor = bridge ? sc.accent : tunnel ? '#ff4400' : sc.primary;
+    const rdOp = bridge ? 0.08 : tunnel ? 0.06 : 0.04;
     const rd = new Mesh(new BoxGeometry(ROAD_WIDTH, 0.02, ROAD_SEG_LEN), new MeshBasicMaterial({ color: rdColor, transparent: true, opacity: rdOp }));
     rd.position.set(0, bridge ? 1.5 : 0.01, z); seg.add(rd);
     for (let l = 1; l < LANE_COUNT; l++) { const lx = (l - 2) * LANE_WIDTH - LANE_WIDTH / 2; for (let d = 0; d < 8; d++) { const dash = sbox(0.06, 0.02, 1.5, rdColor, 0.2); dash.position.set(lx, bridge ? 1.52 : 0.02, z - ROAD_SEG_LEN / 2 + d * 5 + 2.5); seg.add(dash); } }
@@ -248,6 +310,14 @@ export class GameSystem extends createSystem({
       const rail = sbox(0.08, 0.08, ROAD_SEG_LEN, sc.primary, 0.3); rail.position.set(-ROAD_WIDTH / 2 - 0.2, 2.2, z); seg.add(rail);
       const rail2 = sbox(0.08, 0.08, ROAD_SEG_LEN, sc.primary, 0.3); rail2.position.set(ROAD_WIDTH / 2 + 0.2, 2.2, z); seg.add(rail2);
     }
+    if (tunnel) {
+      // Tunnel ceiling and walls
+      const ceil = sbox(ROAD_WIDTH + 2, 0.15, ROAD_SEG_LEN, sc.accent, 0.12); ceil.position.set(0, 6, z); seg.add(ceil);
+      const wL = sbox(0.2, 6, ROAD_SEG_LEN, sc.accent, 0.08); wL.position.set(-ROAD_WIDTH / 2 - 1, 3, z); seg.add(wL);
+      const wR = sbox(0.2, 6, ROAD_SEG_LEN, sc.accent, 0.08); wR.position.set(ROAD_WIDTH / 2 + 1, 3, z); seg.add(wR);
+      // Tunnel lights
+      for (let i = 0; i < 5; i++) { const tl = new Mesh(new SphereGeometry(0.2, 6, 6), new MeshBasicMaterial({ color: '#ff6600', transparent: true, opacity: 0.6 })); tl.position.set(0, 5.8, z - ROAD_SEG_LEN / 2 + i * 8 + 4); seg.add(tl); }
+    }
     for (let s = 0; s < 2; s++) {
       const sign = s === 0 ? -1 : 1; const lamp = new Group();
       const pole = new Mesh(new CylinderGeometry(0.05, 0.05, 4, 4), new MeshBasicMaterial({ color: sc.primary, wireframe: true, transparent: true, opacity: 0.3 }));
@@ -256,7 +326,39 @@ export class GameSystem extends createSystem({
       lt.position.y = 4.1; lamp.add(lt);
       lamp.position.set(sign * (ROAD_WIDTH / 2 + 1.5), 0, z); seg.add(lamp);
     }
-    this.roadG.add(seg); this.roadSegs.push({ mesh: seg, z, isBridge: bridge });
+    this.roadG.add(seg); this.roadSegs.push({ mesh: seg, z, isBridge: bridge, isTunnel: tunnel });
+  }
+
+  private mkRoadsideObj(z: number, side: number): RoadsideObj {
+    const sc = SCHEMES[this.cIdx]; const g = new Group();
+    const bType = ri(0, 3);
+    const x = side * (ROAD_WIDTH / 2 + rf(4, 8));
+    if (bType <= 1) {
+      // Tall building
+      const h = rf(6, 14); const w = rf(1.5, 3);
+      const bld = sbox(w, h, w, sc.primary, 0.06); bld.position.y = h / 2; g.add(bld);
+      // Neon sign
+      const signH = rf(0.4, 0.8); const signW = rf(1.0, w);
+      const signM = sbox(signW, signH, 0.05, sc.accent, rf(0.3, 0.6));
+      signM.position.set(side > 0 ? -w / 2 - 0.03 : w / 2 + 0.03, h * rf(0.4, 0.8), 0); g.add(signM);
+    } else if (bType === 2) {
+      // Short structure with antenna
+      const h = rf(3, 5); const w = rf(2, 4);
+      const bld = sbox(w, h, w * 0.8, sc.accent, 0.04); bld.position.y = h / 2; g.add(bld);
+      const ant = new Mesh(new CylinderGeometry(0.03, 0.03, 3, 4), new MeshBasicMaterial({ color: sc.primary, wireframe: true, transparent: true, opacity: 0.25 }));
+      ant.position.y = h + 1.5; g.add(ant);
+      const tip = new Mesh(new SphereGeometry(0.1, 4, 4), new MeshBasicMaterial({ color: sc.accent, transparent: true, opacity: 0.5 }));
+      tip.position.y = h + 3; g.add(tip);
+    } else {
+      // Pillar with neon ring
+      const h = rf(5, 10);
+      const pil = new Mesh(new CylinderGeometry(0.3, 0.3, h, 6), new MeshBasicMaterial({ color: sc.primary, wireframe: true, transparent: true, opacity: 0.1 }));
+      pil.position.y = h / 2; g.add(pil);
+      const ring = new Mesh(new TorusGeometry(0.6, 0.08, 4, 8), new MeshBasicMaterial({ color: sc.accent, transparent: true, opacity: 0.35 }));
+      ring.position.y = h; ring.rotation.x = Math.PI / 2; g.add(ring);
+    }
+    g.position.set(x, 0, z); this._scene.add(g);
+    return { mesh: g, z, side };
   }
 
   private buildPlayer() {
@@ -265,28 +367,55 @@ export class GameSystem extends createSystem({
     const can = sbox(0.8, 0.25, 1.2, sc.primary, 0.4); can.position.set(0, 0.65, -0.2); this.pGroup.add(can);
     const sp = sbox(1.4, 0.08, 0.3, sc.accent, 0.6); sp.position.set(0, 0.2, 1.2); this.pGroup.add(sp);
     const rs = sbox(1.0, 0.15, 0.15, sc.accent, 0.5); rs.position.set(0, 0.6, -1.2); this.pGroup.add(rs);
-    for (const sx of [-0.4, 0.4]) { const g = sbox(0.08, 0.08, 0.5, sc.accent, 0.8); g.position.set(sx, 0.3, 1.4); this.pGroup.add(g); }
+    for (const sx of [-0.4, 0.4]) { const gn = sbox(0.08, 0.08, 0.5, sc.accent, 0.8); gn.position.set(sx, 0.3, 1.4); this.pGroup.add(gn); }
     for (const [wx, wz] of [[-0.65, 0.7], [0.65, 0.7], [-0.65, -0.7], [0.65, -0.7]]) { const w = new Mesh(new TorusGeometry(0.18, 0.06, 6, 8), new MeshBasicMaterial({ color: sc.accent, wireframe: true })); w.rotation.y = Math.PI / 2; w.position.set(wx, 0.18, wz); this.pGroup.add(w); }
     const gl = new Mesh(new SphereGeometry(0.2, 6, 6), new MeshBasicMaterial({ color: sc.accent, transparent: true, opacity: 0.4 })); gl.position.set(0, 0.3, -1.3); this.pGroup.add(gl);
-    // Headlight beams
     this.headlightL = new Mesh(new BoxGeometry(0.3, 0.05, 8), new MeshBasicMaterial({ color: sc.primary, transparent: true, opacity: 0.08 }));
     this.headlightL.position.set(-0.35, 0.35, 5.5); this.pGroup.add(this.headlightL);
     this.headlightR = new Mesh(new BoxGeometry(0.3, 0.05, 8), new MeshBasicMaterial({ color: sc.primary, transparent: true, opacity: 0.08 }));
     this.headlightR.position.set(0.35, 0.35, 5.5); this.pGroup.add(this.headlightR);
-    // Shield mesh
     this.shieldM = new Mesh(new SphereGeometry(1.5, 12, 12), new MeshBasicMaterial({ color: sc.powerup, wireframe: true, transparent: true, opacity: 0 })); this.shieldM.position.y = 0.5; this.pGroup.add(this.shieldM);
     this.pGroup.position.set(0, 0, PLAYER_Z); this.entG.add(this.pGroup);
   }
+
 
   private mkEnemy(type: EnemyCar['type'], lane: number, z: number): EnemyCar {
     const sc = SCHEMES[this.cIdx]; const g = new Group(); let hp = 1;
     if (type === 'sedan') { const b = sbox(1.0, 0.3, 2.0, sc.enemy, 0.6); b.position.y = 0.3; g.add(b); const r = sbox(0.7, 0.2, 1.0, sc.enemy, 0.4); r.position.set(0, 0.55, 0); g.add(r); }
     else if (type === 'motorcycle') { const b = sbox(0.4, 0.3, 1.6, sc.enemy, 0.6); b.position.y = 0.3; g.add(b); const r = sbox(0.3, 0.4, 0.5, sc.enemy, 0.5); r.position.set(0, 0.6, -0.2); g.add(r); }
     else if (type === 'helicopter') { const b = sbox(0.8, 0.5, 2.0, sc.enemy, 0.6); b.position.y = 3; g.add(b); const rot = new Mesh(new CylinderGeometry(1.2, 1.2, 0.05, 3), new MeshBasicMaterial({ color: sc.enemy, wireframe: true, transparent: true, opacity: 0.4 })); rot.position.y = 3.4; g.add(rot); const t = sbox(0.2, 0.2, 1.5, sc.enemy, 0.5); t.position.set(0, 3, -1.5); g.add(t); hp = 2; }
-    else { const b = sbox(1.6, 0.5, 3.2, sc.enemy, 0.7); b.position.y = 0.4; g.add(b); const tu = sbox(0.8, 0.3, 0.8, sc.enemy, 0.6); tu.position.set(0, 0.75, 0.3); g.add(tu); const ba = sbox(0.1, 0.1, 1.0, sc.enemy, 0.8); ba.position.set(0, 0.8, 1.2); g.add(ba); for (const sx of [-0.9, 0.9]) { const pl = sbox(0.1, 0.4, 2.8, sc.enemy, 0.4); pl.position.set(sx, 0.4, 0); g.add(pl); } hp = this.wave >= 10 ? 8 : 5; }
+    else if (type === 'van') {
+      // Van: boxy, medium-size, orange-red accents
+      const b = sbox(1.3, 0.5, 2.6, '#ff6600', 0.6); b.position.y = 0.4; g.add(b);
+      const roof = sbox(1.1, 0.2, 2.0, '#ff6600', 0.4); roof.position.set(0, 0.75, 0); g.add(roof);
+      const cargo = sbox(1.0, 0.3, 1.2, sc.enemy, 0.3); cargo.position.set(0, 0.35, -1.0); g.add(cargo);
+      hp = 3 + Math.floor(this.wave / 5);
+    }
+    else if (type === 'interceptor') {
+      // Interceptor: sleek, low-profile, magenta tint
+      const b = sbox(0.8, 0.25, 2.2, '#ff0088', 0.7); b.position.y = 0.25; g.add(b);
+      const w1 = sbox(0.4, 0.08, 0.8, '#ff0088', 0.5); w1.position.set(-0.6, 0.2, 0.3); g.add(w1);
+      const w2 = sbox(0.4, 0.08, 0.8, '#ff0088', 0.5); w2.position.set(0.6, 0.2, 0.3); g.add(w2);
+      hp = 2;
+    }
+    else { // armored
+      const b = sbox(1.6, 0.5, 3.2, sc.enemy, 0.7); b.position.y = 0.4; g.add(b);
+      const tu = sbox(0.8, 0.3, 0.8, sc.enemy, 0.6); tu.position.set(0, 0.75, 0.3); g.add(tu);
+      const ba = sbox(0.1, 0.1, 1.0, sc.enemy, 0.8); ba.position.set(0, 0.8, 1.2); g.add(ba);
+      for (const sx of [-0.9, 0.9]) { const pl = sbox(0.1, 0.4, 2.8, sc.enemy, 0.4); pl.position.set(sx, 0.4, 0); g.add(pl); }
+      hp = this.wave >= 10 ? 8 : 5;
+    }
+    // Scale HP by wave for later waves
+    if (type !== 'armored' && this.wave >= 15) hp += Math.floor((this.wave - 15) / 5);
     g.position.set(laneX(lane), 0, z); this.entG.add(g);
-    const spd = type === 'motorcycle' ? SCROLL_SPD * 0.7 : type === 'helicopter' ? SCROLL_SPD * 0.5 : type === 'armored' ? SCROLL_SPD * 0.3 : SCROLL_SPD * 0.6;
-    return { mesh: g, x: laneX(lane), z, speed: spd, type, hp, fireTimer: rf(0.5, 2), dead: false, targetLane: lane, laneChangeT: rf(2, 5), deathSpin: 0, dying: false };
+    let spd: number;
+    if (type === 'motorcycle') spd = SCROLL_SPD * 0.7;
+    else if (type === 'helicopter') spd = SCROLL_SPD * 0.5;
+    else if (type === 'armored') spd = SCROLL_SPD * 0.3;
+    else if (type === 'van') spd = SCROLL_SPD * 0.55;
+    else if (type === 'interceptor') spd = SCROLL_SPD * 0.85;
+    else spd = SCROLL_SPD * 0.6;
+    return { mesh: g, x: laneX(lane), z, speed: spd, type, hp, fireTimer: rf(0.5, 2), dead: false, targetLane: lane, laneChangeT: rf(2, 5), deathSpin: 0, dying: false, mineCD: type === 'van' ? rf(2, 4) : 999 };
   }
 
   private mkCiv(lane: number, z: number): CivilianCar {
@@ -321,6 +450,12 @@ export class GameSystem extends createSystem({
     return { mesh: g, x: laneX(lane), z, type, dead: false };
   }
 
+  private mkMine(x: number, z: number): Mine {
+    const m = new Mesh(new CylinderGeometry(0.4, 0.4, 0.12, 8), new MeshBasicMaterial({ color: '#ff2200', transparent: true, opacity: 0.6 }));
+    m.position.set(x, 0.06, z); m.rotation.x = -Math.PI / 2; this.entG.add(m);
+    return { mesh: m, x, z, timer: 12, dead: false };
+  }
+
   private fireBullet(x: number, z: number, fp: boolean, dx = 0) {
     const sc = SCHEMES[this.cIdx]; const color = fp ? (this.weaponLvl >= 2 ? '#ff00ff' : sc.primary) : sc.enemy;
     const w = this.weaponLvl >= 2 && fp ? 0.12 : 0.08; const h = this.weaponLvl >= 2 && fp ? 0.04 : 0.08;
@@ -338,7 +473,7 @@ export class GameSystem extends createSystem({
   }
 
   private dropSmoke() {
-    const sc = SCHEMES[this.cIdx]; const g = new Group();
+    const g = new Group();
     for (let i = 0; i < 6; i++) {
       const s = new Mesh(new SphereGeometry(rf(0.4, 0.8), 6, 6), new MeshBasicMaterial({ color: '#888888', transparent: true, opacity: 0.35 }));
       s.position.set(rf(-1, 1), rf(0.3, 1.5), rf(-1, 1)); g.add(s);
@@ -362,6 +497,100 @@ export class GameSystem extends createSystem({
     this.trails.push({ mesh: m, life: 0.6 });
   }
 
+
+  // Mission system
+  private generateMission() {
+    const types: Mission['type'][] = ['kill_count', 'distance_nodmg', 'kill_timed', 'combo_target'];
+    if (this.wave >= 5) types.push('kill_oil');
+    const t = types[ri(0, types.length - 1)];
+    let m: Mission;
+    switch (t) {
+      case 'kill_count':
+        { const n = ri(5, 8 + Math.floor(this.wave / 3)); m = { type: t, desc: `Destroy ${n} enemies`, target: n, progress: 0, timer: 30 + this.wave, active: true }; }
+        break;
+      case 'distance_nodmg':
+        { const d = ri(300, 500 + this.wave * 20); m = { type: t, desc: `Travel ${d}m undamaged`, target: d, progress: 0, timer: 60, active: true }; this.missionNoDmg = true; this.missionDistAtStart = this.dist; }
+        break;
+      case 'kill_oil':
+        { m = { type: t, desc: 'Kill enemy with oil slick', target: 1, progress: 0, timer: 40, active: true }; }
+        break;
+      case 'kill_timed':
+        { const n = ri(3, 5); m = { type: t, desc: `Kill ${n} in 15 seconds`, target: n, progress: 0, timer: 15, active: true }; this.missionKillsAtStart = this.sKills; }
+        break;
+      case 'combo_target':
+        { const c = Math.min(8, ri(4, 6)); m = { type: t, desc: `Reach ${c}x combo`, target: c, progress: 0, timer: 30, active: true }; }
+        break;
+      default:
+        m = { type: 'kill_count', desc: 'Destroy 5 enemies', target: 5, progress: 0, timer: 30, active: true };
+    }
+    this.mission = m;
+  }
+
+  private updateMission(dt: number) {
+    if (!this.mission || !this.mission.active) return;
+    this.mission.timer -= dt;
+    // Check progress
+    switch (this.mission.type) {
+      case 'kill_count':
+        // progress tracked on kill
+        break;
+      case 'distance_nodmg':
+        if (this.missionNoDmg) {
+          this.mission.progress = this.dist - this.missionDistAtStart;
+        }
+        break;
+      case 'kill_timed':
+        this.mission.progress = this.sKills - this.missionKillsAtStart;
+        break;
+      case 'combo_target':
+        this.mission.progress = this.combo;
+        break;
+      case 'kill_oil':
+        // progress tracked on oil kill
+        break;
+    }
+    // Check completion
+    if (this.mission.progress >= this.mission.target) {
+      this.completeMission();
+      return;
+    }
+    // Check timeout
+    if (this.mission.timer <= 0) {
+      this.mission.active = false;
+      this.mission = null;
+      this.missionCD = 20;
+    }
+  }
+
+  private completeMission() {
+    if (!this.mission) return;
+    const bonus = 1000 + this.wave * 200;
+    this.score += bonus;
+    this.addPopup(this.pX, PLAYER_Z + 2, bonus);
+    sfxMissionComplete();
+    this.sMissionsCompleted++;
+    this.career.totalMissions++;
+    this.unlock('mission-1');
+    if (this.sMissionsCompleted >= 3) this.unlock('mission-3');
+    if (this.sMissionsCompleted >= 5) this.unlock('mission-5');
+    if (this.career.totalMissions >= 10) this.unlock('mission-total-10');
+    this.mission.active = false;
+    this.mission = null;
+    this.missionCD = 25;
+    this.saveData();
+  }
+
+  private onEnemyKill(type: EnemyCar['type'], byOil: boolean) {
+    this.killTypesThisGame.add(type);
+    if (type === 'van') { this.sVanKills++; this.career.totalVanKills++; this.unlock('van-kill'); if (this.sVanKills >= 5) this.unlock('van-kill-5'); }
+    if (type === 'interceptor') { this.sInterceptorKills++; this.career.totalInterceptorKills++; this.unlock('interceptor-kill'); if (this.sInterceptorKills >= 5) this.unlock('interceptor-5'); }
+    if (this.killTypesThisGame.size >= 6) this.unlock('all-enemy-types');
+    if (this.weaponLvl >= 2) { this.sLaserKills++; if (this.sLaserKills >= 20) this.unlock('laser-kills-20'); }
+    // Mission: kill_count progress
+    if (this.mission && this.mission.active && this.mission.type === 'kill_count') { this.mission.progress++; }
+    if (this.mission && this.mission.active && this.mission.type === 'kill_oil' && byOil) { this.mission.progress++; }
+  }
+
   private setupInput() {
     window.addEventListener('keydown', (e) => { this.keys.add(e.key.toLowerCase()); if (e.key === 'Escape' || e.key === 'p') { if (this.gState === 'playing') this.pauseG(); else if (this.gState === 'paused') this.resumeG(); } });
     window.addEventListener('keyup', (e) => { this.keys.delete(e.key.toLowerCase()); });
@@ -373,11 +602,13 @@ export class GameSystem extends createSystem({
       { n: 'pause', c: './ui/pause.json' }, { n: 'results', c: './ui/results.json' },
       { n: 'settings', c: './ui/settings.json' }, { n: 'achievements', c: './ui/achievements.json' },
       { n: 'stats', c: './ui/stats.json' }, { n: 'tutorial', c: './ui/tutorial.json' },
+      { n: 'radar', c: './ui/radar.json' },
     ];
     for (const pc of pcs) {
       const obj = new Group();
       obj.position.set(0, 2.5, -3); obj.scale.set(3, 3, 3);
       if (pc.n === 'hud') { obj.position.set(0, 3.5, -4); obj.scale.set(2.5, 2.5, 2.5); }
+      if (pc.n === 'radar') { obj.position.set(2.8, 3.0, -3.5); obj.scale.set(2, 2, 2); }
       this._scene.add(obj);
       const ent = this.world.createTransformEntity(obj);
       ent.addComponent(PanelUI, { config: pc.c });
@@ -391,9 +622,15 @@ export class GameSystem extends createSystem({
     this.queries.achP.subscribe('qualify', (e) => { this.achDoc = e.getValue(PanelDocument, 'document') as UIKitDocument; this.wireAch(); });
     this.queries.statsP.subscribe('qualify', (e) => { this.statDoc = e.getValue(PanelDocument, 'document') as UIKitDocument; this.wireStat(); });
     this.queries.tutP.subscribe('qualify', (e) => { this.tutDoc = e.getValue(PanelDocument, 'document') as UIKitDocument; this.wireTut(); });
+    this.queries.radarP.subscribe('qualify', (e) => { this.radarDoc = e.getValue(PanelDocument, 'document') as UIKitDocument; });
   }
 
-  private showP(name: string) { for (const [pn, ent] of this.panels) { this.sv(ent, pn === name || (name === 'playing' && pn === 'hud')); } }
+  private showP(name: string) {
+    for (const [pn, ent] of this.panels) {
+      const show = pn === name || (name === 'playing' && (pn === 'hud' || pn === 'radar'));
+      this.sv(ent, show);
+    }
+  }
 
   private wireMenu() {
     if (!this.menuDoc) return;
@@ -428,9 +665,13 @@ export class GameSystem extends createSystem({
     this.st(this.statDoc, 'stat-kills', `Total Kills: ${c.totalKills}`); this.st(this.statDoc, 'stat-distance', `Distance: ${Math.floor(c.totalDist)}m`); this.st(this.statDoc, 'stat-powerups', `Power-Ups: ${c.totalPU}`);
     this.st(this.statDoc, 'stat-oils', `Oil Slicks: ${c.totalOil}`); this.st(this.statDoc, 'stat-bosses', `Boss Kills: ${c.totalBoss}`); this.st(this.statDoc, 'stat-wave', `Best Wave: ${c.bestWave}`); this.st(this.statDoc, 'stat-combo', `Best Combo: ${c.bestCombo}x`);
     this.st(this.statDoc, 'stat-smokes', `Smoke Screens: ${c.totalSmokes}`); this.st(this.statDoc, 'stat-bridges', `Bridges Crossed: ${c.bridgesCrossed}`);
+    this.st(this.statDoc, 'stat-missions', `Missions Done: ${c.totalMissions}`);
+    this.st(this.statDoc, 'stat-vans', `Van Kills: ${c.totalVanKills}`);
+    this.st(this.statDoc, 'stat-interceptors', `Interceptor Kills: ${c.totalInterceptorKills}`);
   }
 
   private modesPlayed = new Set<string>();
+
 
   private startG() {
     this.gState = 'playing'; this.score = 0; this.lives = this.diff === 'normal' ? 3 : this.diff === 'hard' ? 2 : 1;
@@ -441,6 +682,14 @@ export class GameSystem extends createSystem({
     this.spawnT = 1; this.puT = PU_INT / 2; this.civT = CIV_INT / 2; this.waveT = 0; this.hazT = HAZARD_INT / 2;
     this.sKills = 0; this.sOils = 0; this.sCivHits = 0; this.sSmokes = 0; this.sHazardsDodged = 0;
     this.puTypes.clear(); this.smokeCD = 0; this.oilCD = 0;
+    // R3 resets
+    this.sVanKills = 0; this.sInterceptorKills = 0; this.sMinesDodged = 0;
+    this.mission = null; this.missionCD = 15; this.sMissionsCompleted = 0;
+    this.missionKillsAtStart = 0; this.missionDistAtStart = 0; this.missionNoDmg = true;
+    this.musicIntensity = 0; this.roadObjT = 0;
+    this.killTypesThisGame.clear(); this.comboMaxT = 0; this.consecutivePerfect = 0;
+    this.sLaserKills = 0; this.tunnelsPassed = 0;
+
     this.modesPlayed.add(this.mode);
     try { const mp = localStorage.getItem('neon-spy-modes'); if (mp) JSON.parse(mp).forEach((m: string) => this.modesPlayed.add(m)); } catch {}
     try { localStorage.setItem('neon-spy-modes', JSON.stringify([...this.modesPlayed])); } catch {}
@@ -457,8 +706,10 @@ export class GameSystem extends createSystem({
     for (const o of this.oils) this.entG.remove(o.mesh); for (const p of this.parts) this._scene.remove(p.mesh);
     for (const s of this.smokes) this.entG.remove(s.mesh); for (const h of this.hazards) this.entG.remove(h.mesh);
     for (const p of this.popups) this._scene.remove(p.mesh); for (const t of this.trails) this._scene.remove(t.mesh);
+    for (const m of this.mines) this.entG.remove(m.mesh);
+    for (const ro of this.roadObjs) this._scene.remove(ro.mesh);
     this.enemies = []; this.civs = []; this.bullets = []; this.pups = []; this.oils = []; this.parts = [];
-    this.smokes = []; this.hazards = []; this.popups = []; this.trails = [];
+    this.smokes = []; this.hazards = []; this.popups = []; this.trails = []; this.mines = []; this.roadObjs = [];
   }
 
   private pauseG() { this.gState = 'paused'; this.showP('pause'); }
@@ -476,10 +727,14 @@ export class GameSystem extends createSystem({
     this.saveData();
     if (this.score >= 5000) this.unlock('score-5k'); if (this.score >= 10000) this.unlock('score-10k'); if (this.score >= 25000) this.unlock('score-25k');
     if (this.score >= 50000) this.unlock('score-50k'); if (this.score >= 100000) this.unlock('score-100k'); if (this.score >= 200000) this.unlock('score-200k');
+    if (this.score >= 500000) this.unlock('score-500k');
     if (this.wave >= 5) this.unlock('wave-5'); if (this.wave >= 10) this.unlock('wave-10'); if (this.wave >= 15) this.unlock('wave-15'); if (this.wave >= 20) this.unlock('wave-20'); if (this.wave >= 30) this.unlock('wave-30');
+    if (this.wave >= 40) this.unlock('wave-40'); if (this.wave >= 50) this.unlock('wave-50');
     if (this.dist >= 1000) this.unlock('dist-1k'); if (this.dist >= 5000) this.unlock('dist-5k'); if (this.dist >= 10000) this.unlock('dist-10k');
-    if (this.sKills >= 200) this.unlock('kills-200');
+    if (this.career.totalDist >= 50000) this.unlock('total-dist-50k');
+    if (this.sKills >= 200) this.unlock('kills-200'); if (this.sKills >= 300) this.unlock('kills-300');
     if (this.wave >= 5 && this.sCivHits === 0) this.unlock('clean-op');
+    if (this.wave >= 5 && this.weaponLvl === 0) this.unlock('no-weapon-wave5');
     this.st(this.resDoc, 'result-score', `Score: ${this.score}`); this.st(this.resDoc, 'result-wave', `Wave: ${this.wave}`);
     this.st(this.resDoc, 'result-distance', `Distance: ${Math.floor(this.dist)}m`); this.st(this.resDoc, 'result-combo', `Max Combo: ${this.maxCombo}x`);
     this.st(this.resDoc, 'result-kills', `Kills: ${this.sKills}`);
@@ -487,6 +742,7 @@ export class GameSystem extends createSystem({
     this.st(this.resDoc, 'result-best', this.score >= this.career.highScore ? 'NEW HIGH SCORE!' : `Best: ${this.career.highScore}`);
     this.showP('results');
   }
+
 
   update(delta: number, time: number) {
     for (let i = 0; i < this.orbs.length; i++) { const o = this.orbs[i]; o.position.y += Math.sin(time * 0.5 + i) * 0.002; (o.material as MeshBasicMaterial).opacity = 0.2 + Math.sin(time + i * 0.7) * 0.1; }
@@ -498,14 +754,17 @@ export class GameSystem extends createSystem({
     if (this.mode === 'speed' && this.gTime >= 120) { this.gameOver(); return; }
     this.handleInput(dt);
     const spd = this.spdBoost ? this.scrollSpd * 1.5 : this.scrollSpd; this.dist += spd * dt;
-    // Road scroll + bridge tracking
+    // Road scroll + bridge/tunnel tracking
     for (const s of this.roadSegs) { s.z -= spd * dt; s.mesh.position.z = s.z; }
     while (this.roadSegs.length > 0 && this.roadSegs[0].z < PLAYER_Z - ROAD_SEG_LEN * 2) {
       const old = this.roadSegs.shift()!;
-      if (old.isBridge) { this.sBridges++; this.career.bridgesCrossed++; if (this.sBridges >= 3) this.unlock('bridge-3'); if (this.career.bridgesCrossed >= 10) this.unlock('bridge-10'); }
+      if (old.isBridge) { this.sBridges++; this.career.bridgesCrossed++; if (this.sBridges >= 3) this.unlock('bridge-3'); if (this.sBridges >= 5) this.unlock('bridge-5-game'); if (this.career.bridgesCrossed >= 10) this.unlock('bridge-10'); }
+      if (old.isTunnel) { this.tunnelsPassed++; if (this.tunnelsPassed >= 3) this.unlock('tunnel-3'); }
       this.roadG.remove(old.mesh);
-      const nb = Math.random() < BRIDGE_CHANCE;
-      this.addRoadSeg(this.roadSegs[this.roadSegs.length - 1].z + ROAD_SEG_LEN, nb);
+      const r = Math.random();
+      const nb = r < BRIDGE_CHANCE;
+      const nt = !nb && r < BRIDGE_CHANCE + TUNNEL_CHANCE;
+      this.addRoadSeg(this.roadSegs[this.roadSegs.length - 1].z + ROAD_SEG_LEN, nb, nt);
     }
     // Spawn enemies
     this.spawnT -= dt; if (this.spawnT <= 0) { this.spawnE(); this.spawnT = Math.max(0.3, SPAWN_INT - this.wave * 0.04) * (this.diff === 'insane' ? 0.6 : this.diff === 'hard' ? 0.8 : 1); }
@@ -513,15 +772,28 @@ export class GameSystem extends createSystem({
     this.puT -= dt; if (this.puT <= 0) { const ts: PowerUpObj['type'][] = ['missile', 'oilslick', 'shield', 'speed', 'rapid', 'weapon']; this.pups.push(this.mkPU(ts[ri(0, ts.length - 1)], ri(0, LANE_COUNT - 1), PLAYER_Z + 70)); this.puT = PU_INT; }
     // Road hazards
     this.hazT -= dt; if (this.hazT <= 0) { const ht: RoadHazard['type'][] = ['pothole', 'barrier', 'cone']; this.hazards.push(this.mkHazard(ht[ri(0, 2)], ri(0, LANE_COUNT - 1), PLAYER_Z + 75)); this.hazT = Math.max(2, HAZARD_INT - this.wave * 0.15); }
+    // Roadside buildings
+    this.roadObjT -= dt;
+    if (this.roadObjT <= 0) {
+      const side = Math.random() < 0.5 ? -1 : 1;
+      this.roadObjs.push(this.mkRoadsideObj(PLAYER_Z + 80 + rf(0, 20), side));
+      this.roadObjT = rf(1.5, 3.5);
+    }
     // Wave progression
     this.waveT += dt; if (this.waveT >= 20) {
       this.waveT = 0;
-      if (this.waveNoDmg) { this.sPerfectWaves++; this.unlock('perfect-wave'); if (this.sPerfectWaves >= 3) this.unlock('perfect-3'); }
+      if (this.waveNoDmg) { this.sPerfectWaves++; this.consecutivePerfect++; this.unlock('perfect-wave'); if (this.sPerfectWaves >= 3) this.unlock('perfect-3'); if (this.consecutivePerfect >= 5) this.unlock('consecutive-perfect-5'); } else { this.consecutivePerfect = 0; }
       this.waveNoDmg = true;
-      this.wave++; this.scrollSpd = SCROLL_SPD + this.wave * 0.8; sfxWave(); updateMusic(this.wave);
+      this.wave++; this.scrollSpd = SCROLL_SPD + this.wave * 0.8; sfxWave();
       if (this.wave % 5 === 0 && !this.bossOut) { this.bossOut = true; this.enemies.push(this.mkEnemy('armored', ri(1, 3), PLAYER_Z + 80)); sfxBoss(); } else { this.bossOut = false; }
     }
+    // Mission system
+    if (this.missionCD > 0) this.missionCD -= dt;
+    if (!this.mission && this.missionCD <= 0 && this.wave >= 3) { this.generateMission(); }
+    this.updateMission(dt);
+    // Combo timing
     if (this.comboT > 0) { this.comboT -= dt; if (this.comboT <= 0) this.combo = 1; }
+    if (this.combo >= 8) { this.comboMaxT += dt; if (this.comboMaxT >= 8) this.unlock('combo-streak'); } else { this.comboMaxT = 0; }
     if (this.pShield) { this.shieldT -= dt; if (this.shieldT <= 0) { this.pShield = false; (this.shieldM.material as MeshBasicMaterial).opacity = 0; } else { (this.shieldM.material as MeshBasicMaterial).opacity = 0.2 + Math.sin(time * 8) * 0.1; } }
     if (this.rapidF) { this.rapidT -= dt; if (this.rapidT <= 0) { this.rapidF = false; this.fireCD = this.weaponLvl >= 2 ? 0.12 : 0.18; } }
     if (this.spdBoost) { this.spdT -= dt; if (this.spdT <= 0) this.spdBoost = false; }
@@ -540,7 +812,7 @@ export class GameSystem extends createSystem({
     if (this.oilCD > 0) this.oilCD -= dt;
     if (this.gpad.grip && !this.prevGrip && this.oilCD <= 0) { this.dropOil(); this.oilCD = 1; this.sOils++; }
     this.prevGrip = this.gpad.grip;
-    // Smoke screen (R key or A button)
+    // Smoke screen
     if (this.keys.has('r') && this.smokeCD <= 0) { this.dropSmoke(); this.smokeCD = 2; }
     if (this.gpad.a && !this.prevA && this.smokeCD <= 0) { this.dropSmoke(); this.smokeCD = 2; }
     this.prevA = this.gpad.a;
@@ -550,15 +822,28 @@ export class GameSystem extends createSystem({
     this.prevB = this.gpad.b;
     // Speed boost trail
     this.addTrail();
+    // Music intensity
+    const targetIntensity = clp((this.enemies.filter(e => !e.dead && !e.dying && e.z > PLAYER_Z - 10 && e.z < PLAYER_Z + 30).length / 4) + (this.bossOut ? 0.5 : 0) + (this.combo >= 5 ? 0.2 : 0), 0, 1);
+    this.musicIntensity += (targetIntensity - this.musicIntensity) * dt * 2;
+    updateMusic(this.wave, this.musicIntensity, this.bossOut);
     // Update all entities
-    this.updEnemies(dt, spd, time); this.updCivs(dt, spd); this.updBullets(dt); this.updPUs(dt, spd); this.updOils(dt, spd); this.updSmokes(dt, spd); this.updParts(dt); this.updPopups(dt); this.updTrails(dt); this.updHazards(dt, spd); this.checkColl(time);
-    this.updHUD();
+    this.updEnemies(dt, spd, time); this.updCivs(dt, spd); this.updBullets(dt); this.updPUs(dt, spd); this.updOils(dt, spd); this.updSmokes(dt, spd); this.updParts(dt); this.updPopups(dt); this.updTrails(dt); this.updHazards(dt, spd); this.updMines(dt, spd); this.updRoadObjs(dt, spd); this.checkColl(time);
+    this.updHUD(); this.updRadar();
     this.pGroup.position.x = this.pX;
     // Headlight flicker
     const hlOp = 0.06 + Math.sin(time * 3) * 0.02;
     (this.headlightL.material as MeshBasicMaterial).opacity = hlOp;
     (this.headlightR.material as MeshBasicMaterial).opacity = hlOp;
     if (this.invT > 0) this.pGroup.visible = Math.floor(time * 10) % 2 === 0; else this.pGroup.visible = true;
+    // Neon sign flicker on roadside objs
+    for (const ro of this.roadObjs) {
+      if (ro.mesh.children.length > 1) {
+        const sign = ro.mesh.children[1];
+        if (sign && (sign as Mesh).material) {
+          (sign as Mesh).material = new MeshBasicMaterial({ color: SCHEMES[this.cIdx].accent, transparent: true, opacity: 0.3 + Math.sin(time * 4 + ro.z) * 0.2 });
+        }
+      }
+    }
   }
 
   private pollGP() { try { const inp = this.world.input; if (inp) { const gps = (inp as any).xr?.gamepads; if (gps) { for (const gp of gps) { if (!gp) continue; this.gpad.axes = gp.getAxesValues?.('thumbstick') ?? { x: 0, y: 0 }; this.gpad.trigger = !!gp.getButtonValue?.('trigger'); this.gpad.grip = !!gp.getButtonValue?.('grip'); this.gpad.a = !!gp.getButtonValue?.('button1'); this.gpad.b = !!gp.getButtonValue?.('button2'); } } } } catch {} }
@@ -572,27 +857,52 @@ export class GameSystem extends createSystem({
     if (this.mode === 'challenge' && this.moves >= 500) this.gameOver();
   }
 
+
   private updEnemies(dt: number, ss: number, time: number) {
     for (const e of this.enemies) {
       if (e.dead) continue;
-      // Death animation
       if (e.dying) { e.deathSpin += dt * 8; e.mesh.rotation.y = e.deathSpin; e.mesh.position.y += dt * 2; const mat = e.mesh.children[0] as Mesh; if (mat?.material) (mat.material as MeshBasicMaterial).opacity = Math.max(0, 0.6 - e.deathSpin / 5); if (e.deathSpin > 3) e.dead = true; continue; }
       e.z -= (ss - e.speed) * dt; e.mesh.position.z = e.z;
       // Lane-change AI
       e.laneChangeT -= dt;
       if (e.laneChangeT <= 0 && e.type !== 'armored') {
-        e.targetLane = clp(e.targetLane + ri(-1, 1), 0, LANE_COUNT - 1);
-        e.laneChangeT = rf(2, 4);
+        if (e.type === 'interceptor') {
+          // Interceptors actively target the player's lane
+          const pLane = Math.round(this.pX / LANE_WIDTH + 2);
+          e.targetLane = clp(pLane + ri(-1, 1), 0, LANE_COUNT - 1);
+          e.laneChangeT = rf(1, 2);
+        } else {
+          e.targetLane = clp(e.targetLane + ri(-1, 1), 0, LANE_COUNT - 1);
+          e.laneChangeT = rf(2, 4);
+        }
       }
       const tlx = laneX(e.targetLane);
-      if (Math.abs(e.x - tlx) > 0.1) { e.x += (tlx > e.x ? 1 : -1) * PLAYER_SPD * 0.5 * dt; e.mesh.position.x = e.x; }
+      const laneSpd = e.type === 'interceptor' ? PLAYER_SPD * 0.8 : PLAYER_SPD * 0.5;
+      if (Math.abs(e.x - tlx) > 0.1) { e.x += (tlx > e.x ? 1 : -1) * laneSpd * dt; e.mesh.position.x = e.x; }
       // Helicopter rotor
       if (e.type === 'helicopter' && e.mesh.children[1]) e.mesh.children[1].rotation.y += dt * 10;
+      // Van mine dropping
+      if (e.type === 'van') {
+        e.mineCD -= dt;
+        if (e.mineCD <= 0 && e.z > PLAYER_Z - 5 && e.z < PLAYER_Z + 50) {
+          this.mines.push(this.mkMine(e.x, e.z - 1.5));
+          sfxMine();
+          e.mineCD = rf(3, 5) - this.wave * 0.05;
+        }
+      }
       // Check if in smoke
       let inSmoke = false;
       for (const s of this.smokes) { if (!s.dead && Math.abs(e.x - s.x) < 2 && Math.abs(e.z - s.z) < 3) { inSmoke = true; break; } }
-      // Enemy fire (suppressed in smoke)
-      if (e.type !== 'motorcycle' && !inSmoke) { e.fireTimer -= dt; if (e.fireTimer <= 0 && e.z > PLAYER_Z && e.z < PLAYER_Z + 50) { this.fireBullet(e.x, e.z - 1.5, false); sfxEnemyShoot(); e.fireTimer = ENEMY_FIRE_RATE / (1 + this.wave * 0.1); } }
+      // Enemy fire (suppressed in smoke, motorcycles don't fire)
+      if (e.type !== 'motorcycle' && !inSmoke) {
+        e.fireTimer -= dt;
+        if (e.fireTimer <= 0 && e.z > PLAYER_Z && e.z < PLAYER_Z + 50) {
+          this.fireBullet(e.x, e.z - 1.5, false);
+          sfxEnemyShoot();
+          const rateScale = e.type === 'interceptor' ? 0.7 : 1;
+          e.fireTimer = ENEMY_FIRE_RATE * rateScale / (1 + this.wave * 0.1);
+        }
+      }
       if (e.z < PLAYER_Z - 20) e.dead = true;
     }
     this.enemies = this.enemies.filter(e => { if (e.dead) { this.entG.remove(e.mesh); return false; } return true; });
@@ -613,22 +923,42 @@ export class GameSystem extends createSystem({
     for (const h of this.hazards) { if (h.dead) continue; h.z -= ss * dt; h.mesh.position.z = h.z; if (h.z < PLAYER_Z - 10) { h.dead = true; this.sHazardsDodged++; if (this.sHazardsDodged >= 10) this.unlock('hazard-dodge-10'); if (this.sHazardsDodged >= 30) this.unlock('hazard-dodge-30'); } }
     this.hazards = this.hazards.filter(h => { if (h.dead) { this.entG.remove(h.mesh); return false; } return true; });
   }
+  private updMines(dt: number, ss: number) {
+    for (const m of this.mines) {
+      if (m.dead) continue;
+      m.z -= ss * dt; m.mesh.position.z = m.z; m.timer -= dt;
+      // Pulsing glow
+      (m.mesh.material as MeshBasicMaterial).opacity = 0.4 + Math.sin(m.timer * 6) * 0.2;
+      if (m.timer <= 0 || m.z < PLAYER_Z - 15) {
+        m.dead = true;
+        if (m.z >= PLAYER_Z - 15) { this.sMinesDodged++; if (this.sMinesDodged >= 5) this.unlock('mine-dodge-5'); if (this.sMinesDodged >= 15) this.unlock('mine-dodge-15'); }
+      }
+    }
+    this.mines = this.mines.filter(m => { if (m.dead) { this.entG.remove(m.mesh); return false; } return true; });
+  }
+  private updRoadObjs(dt: number, ss: number) {
+    for (const ro of this.roadObjs) { ro.z -= ss * dt; ro.mesh.position.z = ro.z; }
+    this.roadObjs = this.roadObjs.filter(ro => { if (ro.z < PLAYER_Z - 40) { this._scene.remove(ro.mesh); return false; } return true; });
+  }
   private updParts(dt: number) { for (const p of this.parts) { p.vel.y -= 9.8 * dt; p.mesh.position.add(p.vel.clone().multiplyScalar(dt)); p.life -= dt; (p.mesh.material as MeshBasicMaterial).opacity = Math.max(0, p.life / p.maxLife); } this.parts = this.parts.filter(p => { if (p.life <= 0) { this._scene.remove(p.mesh); return false; } return true; }); }
   private updPopups(dt: number) { for (const p of this.popups) { p.y += dt * 2; p.mesh.position.y = p.y; p.life -= dt; (p.mesh.material as MeshBasicMaterial).opacity = Math.max(0, p.life); } this.popups = this.popups.filter(p => { if (p.life <= 0) { this._scene.remove(p.mesh); return false; } return true; }); }
   private updTrails(dt: number) { for (const t of this.trails) { t.life -= dt; (t.mesh.material as MeshBasicMaterial).opacity = Math.max(0, t.life * 0.8); } this.trails = this.trails.filter(t => { if (t.life <= 0) { this._scene.remove(t.mesh); return false; } return true; }); }
 
+
   private checkColl(time: number) {
     const px = this.pX, pz = PLAYER_Z;
     // Player bullets vs enemies
-    for (const b of this.bullets) { if (b.dead || !b.fromPlayer) continue; for (const e of this.enemies) { if (e.dead || e.dying) continue; const hw = e.type === 'armored' ? 1.8 : e.type === 'helicopter' ? 1.0 : 0.7; const hd = e.type === 'armored' ? 3.5 : 2.2; if (Math.abs(b.x - e.x) < hw && Math.abs(b.z - e.z) < hd) { b.dead = true; e.hp--; sfxHit(); if (e.hp <= 0) { e.dying = true; e.deathSpin = 0; const pts = e.type === 'armored' ? 1000 : e.type === 'helicopter' ? 300 : e.type === 'motorcycle' ? 150 : 100; const gained = pts * this.combo; this.score += gained; this.addPopup(e.x, e.z, gained); this.spawnParts(e.x, 0.5, e.z, SCHEMES[this.cIdx].enemy, e.type === 'armored' ? 25 : 15); sfxExplosion(); if (e.type === 'armored') this.triggerShake(0.15, 0.3); this.sKills++; this.career.totalKills++; this.recentKillTimes.push(time); this.recentKillTimes = this.recentKillTimes.filter(t => time - t < 1); if (this.recentKillTimes.length >= 3) this.unlock('multi-kill-3'); this.combo = Math.min(8, this.combo + 1); this.comboT = COMBO_DECAY; if (this.combo > this.maxCombo) this.maxCombo = this.combo; if (this.combo >= 3) { this.unlock('combo-3'); sfxCombo(); } if (this.combo >= 5) this.unlock('combo-5'); if (this.combo >= 8) this.unlock('combo-8'); this.unlock('first-kill'); if (this.sKills >= 10) this.unlock('kills-10'); if (this.sKills >= 25) this.unlock('kills-25'); if (this.sKills >= 50) this.unlock('kills-50'); if (this.sKills >= 100) this.unlock('kills-100'); if (this.sKills >= 200) this.unlock('kills-200'); if (e.type === 'armored') { this.career.totalBoss++; this.unlock('boss-kill'); if (this.career.totalBoss >= 5) this.unlock('boss-5'); } if (this.spdBoost) this.unlock('speed-kill'); for (const sm of this.smokes) { if (!sm.dead && Math.abs(e.x - sm.x) < 2 && Math.abs(e.z - sm.z) < 3) { this.unlock('smoke-kill'); break; } } } else { this.spawnParts(b.x, 0.5, b.z, '#ffffff', 4); } break; } } }
+    for (const b of this.bullets) { if (b.dead || !b.fromPlayer) continue; for (const e of this.enemies) { if (e.dead || e.dying) continue; const hw = e.type === 'armored' ? 1.8 : e.type === 'van' ? 1.4 : e.type === 'helicopter' ? 1.0 : e.type === 'interceptor' ? 0.8 : 0.7; const hd = e.type === 'armored' ? 3.5 : e.type === 'van' ? 2.8 : 2.2; if (Math.abs(b.x - e.x) < hw && Math.abs(b.z - e.z) < hd) { b.dead = true; e.hp--; sfxHit(); if (e.hp <= 0) { e.dying = true; e.deathSpin = 0; let pts: number; if (e.type === 'armored') pts = 1000; else if (e.type === 'helicopter') pts = 300; else if (e.type === 'motorcycle') pts = 150; else if (e.type === 'van') pts = 250; else if (e.type === 'interceptor') pts = 350; else pts = 100; const gained = pts * this.combo; this.score += gained; this.addPopup(e.x, e.z, gained); this.spawnParts(e.x, 0.5, e.z, SCHEMES[this.cIdx].enemy, e.type === 'armored' ? 25 : 15); sfxExplosion(); if (e.type === 'armored') this.triggerShake(0.15, 0.3); this.sKills++; this.career.totalKills++; this.onEnemyKill(e.type, false); this.recentKillTimes.push(time); this.recentKillTimes = this.recentKillTimes.filter(t => time - t < 1); if (this.recentKillTimes.length >= 3) this.unlock('multi-kill-3'); this.combo = Math.min(8, this.combo + 1); this.comboT = COMBO_DECAY; if (this.combo > this.maxCombo) this.maxCombo = this.combo; if (this.combo >= 3) { this.unlock('combo-3'); sfxCombo(); } if (this.combo >= 5) this.unlock('combo-5'); if (this.combo >= 8) this.unlock('combo-8'); this.unlock('first-kill'); if (this.sKills >= 10) this.unlock('kills-10'); if (this.sKills >= 25) this.unlock('kills-25'); if (this.sKills >= 50) this.unlock('kills-50'); if (this.sKills >= 100) this.unlock('kills-100'); if (this.sKills >= 200) this.unlock('kills-200'); if (this.sKills >= 300) this.unlock('kills-300'); if (e.type === 'armored') { this.career.totalBoss++; this.unlock('boss-kill'); if (this.career.totalBoss >= 5) this.unlock('boss-5'); } if (this.spdBoost) this.unlock('speed-kill'); for (const sm of this.smokes) { if (!sm.dead && Math.abs(e.x - sm.x) < 2 && Math.abs(e.z - sm.z) < 3) { this.unlock('smoke-kill'); break; } } } else { this.spawnParts(b.x, 0.5, b.z, '#ffffff', 4); } break; } } }
     // Enemy bullets vs player
     if (this.invT <= 0) { for (const b of this.bullets) { if (b.dead || b.fromPlayer) continue; if (Math.abs(b.x - px) < 0.8 && Math.abs(b.z - pz) < 1.5) { b.dead = true; if (this.pShield) { this.pShield = false; (this.shieldM.material as MeshBasicMaterial).opacity = 0; sfxShield(); this.spawnParts(px, 0.5, pz, SCHEMES[this.cIdx].powerup, 10); } else { this.pHit(); } } } }
     // Enemy body vs player
-    if (this.invT <= 0) { for (const e of this.enemies) { if (e.dead || e.dying) continue; const hw = e.type === 'armored' ? 1.6 : 0.9; if (Math.abs(px - e.x) < hw && Math.abs(pz - e.z) < 2.0) { if (this.pShield) { e.dying = true; e.deathSpin = 0; this.pShield = false; (this.shieldM.material as MeshBasicMaterial).opacity = 0; this.spawnParts(e.x, 0.5, e.z, SCHEMES[this.cIdx].enemy, 15); sfxExplosion(); } else { this.pHit(); } } } }
+    if (this.invT <= 0) { for (const e of this.enemies) { if (e.dead || e.dying) continue; const hw = e.type === 'armored' ? 1.6 : e.type === 'van' ? 1.3 : 0.9; if (Math.abs(px - e.x) < hw && Math.abs(pz - e.z) < 2.0) { if (this.pShield) { e.dying = true; e.deathSpin = 0; this.pShield = false; (this.shieldM.material as MeshBasicMaterial).opacity = 0; this.spawnParts(e.x, 0.5, e.z, SCHEMES[this.cIdx].enemy, 15); sfxExplosion(); } else { this.pHit(); } } } }
     // Civilian collision
     if (this.invT <= 0) { for (const c of this.civs) { if (c.dead) continue; if (Math.abs(px - c.x) < 0.9 && Math.abs(pz - c.z) < 2.0) { c.dead = true; this.sCivHits++; sfxCivHit(); this.spawnParts(c.x, 0.5, c.z, SCHEMES[this.cIdx].civilian, 8); this.score = Math.max(0, this.score - 200); this.addPopup(c.x, c.z, -200); this.combo = 1; } } }
     // Road hazard collision
     if (this.invT <= 0) { for (const h of this.hazards) { if (h.dead) continue; const hr = h.type === 'barrier' ? 1.2 : 0.7; if (Math.abs(px - h.x) < hr && Math.abs(pz - h.z) < 1.5) { h.dead = true; sfxHazard(); this.spawnParts(h.x, 0.3, h.z, '#ff6600', 8); if (this.pShield) { this.pShield = false; (this.shieldM.material as MeshBasicMaterial).opacity = 0; } else { this.pHit(); } } } }
+    // Mine collision
+    if (this.invT <= 0) { for (const m of this.mines) { if (m.dead) continue; if (Math.abs(px - m.x) < 0.7 && Math.abs(pz - m.z) < 0.7) { m.dead = true; sfxExplosion(); this.spawnParts(m.x, 0.3, m.z, '#ff2200', 15); this.triggerShake(0.1, 0.2); if (this.pShield) { this.pShield = false; (this.shieldM.material as MeshBasicMaterial).opacity = 0; } else { this.pHit(); } } } }
     // Power-up pickup
     for (const pu of this.pups) { if (pu.dead) continue; if (Math.abs(px - pu.x) < 1.2 && Math.abs(pz - pu.z) < 2.2) { pu.dead = true; sfxPowerUp(); this.career.totalPU++; this.puTypes.add(pu.type);
       switch (pu.type) {
@@ -645,12 +975,24 @@ export class GameSystem extends createSystem({
       this.spawnParts(pu.x, 0.5, pu.z, SCHEMES[this.cIdx].powerup, 10);
     } }
     // Oil slick vs enemies
-    for (const o of this.oils) { if (o.dead) continue; for (const e of this.enemies) { if (e.dead || e.dying) continue; if (Math.abs(o.x - e.x) < 1.0 && Math.abs(o.z - e.z) < 1.5) { e.dying = true; e.deathSpin = 0; o.dead = true; const gained = 200 * this.combo; this.score += gained; this.addPopup(e.x, e.z, gained); this.spawnParts(e.x, 0.5, e.z, '#333333', 12); sfxHit(); this.sKills++; this.career.totalKills++; if (e.type === 'armored') { this.career.totalBoss++; this.unlock('oil-boss'); } } } }
+    for (const o of this.oils) { if (o.dead) continue; for (const e of this.enemies) { if (e.dead || e.dying) continue; if (Math.abs(o.x - e.x) < 1.0 && Math.abs(o.z - e.z) < 1.5) { e.dying = true; e.deathSpin = 0; o.dead = true; const gained = 200 * this.combo; this.score += gained; this.addPopup(e.x, e.z, gained); this.spawnParts(e.x, 0.5, e.z, '#333333', 12); sfxHit(); this.sKills++; this.career.totalKills++; this.onEnemyKill(e.type, true); if (e.type === 'armored') { this.career.totalBoss++; this.unlock('oil-boss'); } } } }
   }
 
-  private pHit() { if (this.mode === 'zen') return; this.lives--; sfxDeath(); this.spawnParts(this.pX, 0.5, PLAYER_Z, SCHEMES[this.cIdx].primary, 20); this.invT = 2; this.combo = 1; this.weaponLvl = Math.max(0, this.weaponLvl - 1); this.waveNoDmg = false; this.triggerShake(0.12, 0.25); if (this.lives <= 0) this.gameOver(); }
+  private pHit() {
+    if (this.mode === 'zen') return; this.lives--; sfxDeath(); this.spawnParts(this.pX, 0.5, PLAYER_Z, SCHEMES[this.cIdx].primary, 20);
+    this.invT = 2; this.combo = 1; this.weaponLvl = Math.max(0, this.weaponLvl - 1); this.waveNoDmg = false; this.consecutivePerfect = 0;
+    this.missionNoDmg = false; this.triggerShake(0.12, 0.25); if (this.lives <= 0) this.gameOver();
+  }
 
-  private spawnE() { const l = ri(0, LANE_COUNT - 1); const z = PLAYER_Z + 70 + rf(0, 20); let t: EnemyCar['type'] = 'sedan'; const r = Math.random(); if (this.wave >= 3 && r < 0.2) t = 'motorcycle'; if (this.wave >= 5 && r < 0.15) t = 'helicopter'; this.enemies.push(this.mkEnemy(t, l, z)); }
+  private spawnE() {
+    const l = ri(0, LANE_COUNT - 1); const z = PLAYER_Z + 70 + rf(0, 20);
+    let t: EnemyCar['type'] = 'sedan'; const r = Math.random();
+    if (this.wave >= 3 && r < 0.2) t = 'motorcycle';
+    if (this.wave >= 5 && r < 0.15) t = 'helicopter';
+    if (this.wave >= 4 && r >= 0.15 && r < 0.28) t = 'van';
+    if (this.wave >= 6 && r >= 0.28 && r < 0.38) t = 'interceptor';
+    this.enemies.push(this.mkEnemy(t, l, z));
+  }
 
   private updHUD() {
     if (!this.hudDoc) return;
@@ -664,5 +1006,33 @@ export class GameSystem extends createSystem({
     if (this.mode === 'speed') this.st(this.hudDoc, 'mode-info', `Time: ${Math.ceil(120 - this.gTime)}s`);
     else if (this.mode === 'challenge') this.st(this.hudDoc, 'mode-info', `Moves: ${500 - this.moves}`);
     else this.st(this.hudDoc, 'mode-info', '');
+    // Mission info
+    if (this.mission && this.mission.active) {
+      this.st(this.hudDoc, 'mission-text', `MISSION: ${this.mission.desc}`);
+      this.st(this.hudDoc, 'mission-progress', `${Math.floor(this.mission.progress)}/${this.mission.target} | ${Math.ceil(this.mission.timer)}s`);
+    } else {
+      this.st(this.hudDoc, 'mission-text', '');
+      this.st(this.hudDoc, 'mission-progress', '');
+    }
+  }
+
+  private updRadar() {
+    if (!this.radarDoc) return;
+    // Show up to 6 nearest enemies
+    const nearby = this.enemies.filter(e => !e.dead && !e.dying).sort((a, b) => Math.abs(a.z - PLAYER_Z) - Math.abs(b.z - PLAYER_Z)).slice(0, 6);
+    for (let i = 0; i < 6; i++) {
+      const e = nearby[i];
+      if (e) {
+        const dz = e.z - PLAYER_Z;
+        const dx = e.x - this.pX;
+        const dir = dz > 0 ? '^ ' : 'v ';
+        const side = Math.abs(dx) > 1 ? (dx > 0 ? ' >' : ' <') : '';
+        const dist = Math.abs(Math.floor(dz));
+        this.st(this.radarDoc, `radar-${i}`, `${dir}${e.type} ${dist}m${side}`);
+      } else {
+        this.st(this.radarDoc, `radar-${i}`, '');
+      }
+    }
+    this.st(this.radarDoc, 'radar-count', `${this.enemies.filter(e => !e.dead && !e.dying).length} threats`);
   }
 }
