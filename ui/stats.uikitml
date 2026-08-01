@@ -26,6 +26,8 @@
       <div name="stat-barrels" font-size="10" color="#ff4400">Barrels Exploded: 0</div>
       <div name="stat-nitros" font-size="10" color="#ff6600">Nitros Used: 0</div>
       <div name="stat-formations" font-size="10" color="#ffaa00">Formations Cleared: 0</div>
+      <div name="stat-rivals" font-size="10" color="#ff3333">Rival Defeats: 0</div>
+      <div name="stat-stealths" font-size="10" color="#9900ff">Stealth Cloaks: 0</div>
     </div>
     <div name="btn-stats-back" font-size="11" color="#ffffff" background-color="#555555" border-radius="10" padding-top="5" padding-bottom="5" padding-left="14" padding-right="14" margin-top="4" cursor="pointer">Back</div>
   </div>

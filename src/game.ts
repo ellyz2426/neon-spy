@@ -58,6 +58,7 @@ interface LeaderEntry { score: number; wave: number; date: string; }
 interface OilTrailSeg { mesh: Mesh; x: number; z: number; timer: number; dead: boolean; }
 interface OverpassObj { mesh: Group; z: number; }
 interface HighwaySign { mesh: Group; z: number; side: number; }
+interface RivalSpy { mesh: Group; x: number; z: number; hp: number; maxHp: number; dead: boolean; dodgeCD: number; fireCD: number; phase: 'enter'|'combat'|'flee'; phaseT: number; targetLane: number; }
 
 const ROAD_WIDTH = 12; const LANE_COUNT = 5; const LANE_WIDTH = ROAD_WIDTH / LANE_COUNT;
 const ROAD_SEG_LEN = 40; const ROAD_VIS = 8; const PLAYER_Z = -8;
@@ -110,6 +111,12 @@ function sfxTankFire() { tone(50, 0.5, 'sawtooth', 0.18); tone(35, 0.6, 'square'
 function sfxTankBoss() { tone(100, 0.4, 'square', 0.14); tone(60, 0.6, 'sawtooth', 0.12); setTimeout(() => tone(40, 0.4, 'square', 0.1), 150); }
 function sfxOilTrail() { tone(160, 0.15, 'triangle', 0.06); tone(120, 0.2, 'triangle', 0.04); }
 function sfxCarSwitch() { tone(500, 0.08, 'sine', 0.08); setTimeout(() => tone(700, 0.08, 'sine', 0.08), 50); }
+function sfxRivalAppear() { tone(220, 0.3, 'square', 0.12); tone(165, 0.4, 'sawtooth', 0.1); setTimeout(() => tone(110, 0.5, 'square', 0.08), 150); }
+function sfxRivalHit() { tone(350, 0.12, 'sawtooth', 0.1); tone(450, 0.1, 'square', 0.08); }
+function sfxRivalDefeat() { tone(440, 0.15, 'sine', 0.12); setTimeout(() => tone(660, 0.12, 'sine', 0.12), 80); setTimeout(() => tone(880, 0.12, 'sine', 0.14), 160); setTimeout(() => tone(1100, 0.12, 'sine', 0.14), 240); setTimeout(() => tone(1320, 0.2, 'sine', 0.16), 320); }
+function sfxRivalDodge() { tone(800, 0.06, 'sine', 0.06); tone(600, 0.08, 'sine', 0.04); }
+function sfxStealthOn() { tone(900, 0.15, 'sine', 0.06); tone(1200, 0.12, 'sine', 0.05); setTimeout(() => tone(1500, 0.1, 'sine', 0.04), 80); }
+function sfxStealthOff() { tone(600, 0.1, 'sine', 0.05); tone(400, 0.12, 'sine', 0.04); }
 
 let mosc1: OscillatorNode|null = null, mosc2: OscillatorNode|null = null, mosc3: OscillatorNode|null = null;
 let mgain: GainNode|null = null, mgain2: GainNode|null = null, mgain3: GainNode|null = null;
@@ -182,7 +189,7 @@ export class GameSystem extends createSystem({
   private radarDoc: UIKitDocument|null = null;
   private lbDoc: UIKitDocument|null = null;
   private achs: Achievement[] = []; private achPg = 0;
-  private career = { gamesPlayed: 0, totalScore: 0, highScore: 0, totalKills: 0, totalDist: 0, totalPU: 0, totalOil: 0, totalBoss: 0, bestWave: 1, bestCombo: 1, totalSmokes: 0, totalHazards: 0, maxWeapon: 0, bridgesCrossed: 0, perfectWaves: 0, totalMissions: 0, totalVanKills: 0, totalInterceptorKills: 0, totalEMPs: 0, totalDecoys: 0, totalDocks: 0, totalJumps: 0, totalRainDist: 0, totalCloseCalls: 0, totalBarrels: 0, totalNitros: 0 };
+  private career = { gamesPlayed: 0, totalScore: 0, highScore: 0, totalKills: 0, totalDist: 0, totalPU: 0, totalOil: 0, totalBoss: 0, bestWave: 1, bestCombo: 1, totalSmokes: 0, totalHazards: 0, maxWeapon: 0, bridgesCrossed: 0, perfectWaves: 0, totalMissions: 0, totalVanKills: 0, totalInterceptorKills: 0, totalEMPs: 0, totalDecoys: 0, totalDocks: 0, totalJumps: 0, totalRainDist: 0, totalCloseCalls: 0, totalBarrels: 0, totalNitros: 0, totalRivalDefeats: 0, totalStealths: 0 };
   private sKills = 0; private sOils = 0; private sCivHits = 0; private sSmokes = 0; private sHazardsDodged = 0;
   private puTypes = new Set<string>(); private oilCD = 0; private smokeCD = 0;
   private waveNoDmg = true; private sPerfectWaves = 0; private sBridges = 0;
@@ -223,6 +230,12 @@ export class GameSystem extends createSystem({
   private highwaySigns: HighwaySign[] = []; private signCD = 8;
   private sGunshipKills = 0; private sTankKills = 0;
   private bossTypesThisGame = new Set<string>();
+  // Round 9: Rival Spy Car, Stealth Cloak
+  private rival: RivalSpy | null = null; private rivalCD = 0; private sRivalDefeats = 0; private sRivalEncounters = 0; private totalRivalDefeats = 0;
+  private stealthActive = false; private stealthTimer = 0; private stealthCharges = 2; private sStealthsUsed = 0; private sStealthKills = 0;
+  private envTheme = 0; // 0=Highway, 1=Desert, 2=Arctic, 3=Jungle
+  private envThemesThisGame = new Set<number>();
+  private rivalHpAtStart = 0; private rivalEncounterT = 0; private rivalNoDmg = true;
 
   private st(doc: UIKitDocument|null, id: string, text: string) { if (!doc) return; (doc.getElementById(id) as UIKit.Text|undefined)?.setProperties({ text }); }
   private sv(e: Entity, v: boolean) { try { const o = (e as any).object3D; if (o) { const s = v ? 3 : 0; o.scale.set(s, s, s); } } catch {} }
@@ -388,6 +401,25 @@ export class GameSystem extends createSystem({
       { id: 'overpass-10', name: 'Underpass Pro', desc: 'Drive under 10 overpasses', unlocked: false },
       { id: 'wave-150', name: 'Transcendent', desc: 'Reach wave 150', unlocked: false },
       { id: 'score-5m', name: 'Tycoon', desc: 'Score 5,000,000 points', unlocked: false },
+      // Round 9 achievements (18 new — total 158)
+      { id: 'rival-encounter', name: 'Nemesis Appears', desc: 'Encounter the rival spy', unlocked: false },
+      { id: 'rival-defeat', name: 'Rival Down', desc: 'Defeat the rival spy car', unlocked: false },
+      { id: 'rival-defeat-3', name: 'Arch Nemesis', desc: 'Defeat the rival 3 times total', unlocked: false },
+      { id: 'rival-defeat-5', name: 'Sworn Enemy', desc: 'Defeat the rival 5 times total', unlocked: false },
+      { id: 'rival-nodmg', name: 'Untouched Agent', desc: 'Defeat rival without taking damage', unlocked: false },
+      { id: 'rival-quick', name: 'Quick Draw', desc: 'Defeat rival within 15 seconds', unlocked: false },
+      { id: 'stealth-1', name: 'Going Dark', desc: 'Use stealth cloak for the first time', unlocked: false },
+      { id: 'stealth-kill', name: 'Shadow Strike', desc: 'Kill an enemy while cloaked', unlocked: false },
+      { id: 'stealth-kill-5', name: 'Phantom Agent', desc: 'Kill 5 enemies while cloaked in one game', unlocked: false },
+      { id: 'stealth-10', name: 'Stealth Master', desc: 'Use stealth 10 times total', unlocked: false },
+      { id: 'stealth-rival', name: 'Ghost vs Ghost', desc: 'Defeat rival while stealth is active', unlocked: false },
+      { id: 'env-desert', name: 'Desert Ops', desc: 'Drive through the desert theme', unlocked: false },
+      { id: 'env-arctic', name: 'Arctic Agent', desc: 'Drive through the arctic theme', unlocked: false },
+      { id: 'env-jungle', name: 'Jungle Operative', desc: 'Drive through the jungle theme', unlocked: false },
+      { id: 'env-all', name: 'Globe Trotter', desc: 'Drive through all 4 environment themes in one game', unlocked: false },
+      { id: 'stealth-dodge-rival', name: 'Ghost Escape', desc: 'Use stealth while rival is shooting at you', unlocked: false },
+      { id: 'rival-defeat-stealth-5', name: 'Double Agent', desc: 'Defeat 5 rivals and use stealth 5 times total', unlocked: false },
+      { id: 'wave-200', name: 'Legend', desc: 'Reach wave 200', unlocked: false },
     ];
     try { const a = localStorage.getItem('neon-spy-achs'); if (a) { (JSON.parse(a) as string[]).forEach(id => { const x = this.achs.find(v => v.id === id); if (x) x.unlocked = true; }); } } catch {}
   }
@@ -756,6 +788,102 @@ export class GameSystem extends createSystem({
     if (this.sOils > 0) this.gadgetsUsed.add('oil');
     if (this.sSmokes > 0) this.gadgetsUsed.add('smoke');
     if (this.gadgetsUsed.size >= 4) this.unlock('gadget-master');
+  }
+
+  private activateStealth() {
+    if (this.stealthCharges <= 0 || this.stealthActive) return;
+    this.stealthActive = true; this.stealthTimer = 3; this.stealthCharges--;
+    this.sStealthsUsed++; this.career.totalStealths++;
+    sfxStealthOn(); this.unlock('stealth-1');
+    if (this.career.totalStealths >= 10) this.unlock('stealth-10');
+    if (this.rival && !this.rival.dead) this.unlock('stealth-dodge-rival');
+    if (this.career.totalRivalDefeats >= 5 && this.career.totalStealths >= 5) this.unlock('rival-defeat-stealth-5');
+  }
+
+  private deactivateStealth() {
+    this.stealthActive = false; this.stealthTimer = 0;
+    sfxStealthOff();
+    this.pGroup.traverse(c => { if ((c as any).material) { (c as any).material.transparent = false; (c as any).material.opacity = 1; } });
+  }
+
+  private spawnRival() {
+    if (this.rival && !this.rival.dead) return;
+    const sc = SCHEMES[this.cIdx]; const g = new Group();
+    // Red menacing car body
+    const body = sbox(1.4, 0.4, 2.6, '#cc0000'); body.position.y = 0.4; g.add(body);
+    const cab = sbox(0.9, 0.3, 1.4, '#990000'); cab.position.set(0, 0.75, -0.2); g.add(cab);
+    // Glowing red stripe
+    const stripe = sbox(1.5, 0.02, 2.7, '#ff3333'); stripe.position.y = 0.25; g.add(stripe);
+    // Evil headlights
+    const hl1 = sbox(0.2, 0.1, 0.4, '#ff0000', 0.8); hl1.position.set(-0.5, 0.35, -1.3); g.add(hl1);
+    const hl2 = sbox(0.2, 0.1, 0.4, '#ff0000', 0.8); hl2.position.set(0.5, 0.35, -1.3); g.add(hl2);
+    // Skull emblem on hood
+    const skull = sbox(0.3, 0.05, 0.3, '#ff6666'); skull.position.set(0, 0.62, -0.8); g.add(skull);
+    const hp = 6 + Math.floor(this.wave / 10) * 2;
+    g.position.set(laneX(2), 0, PLAYER_Z + 70);
+    this.entG.add(g);
+    this.rival = { mesh: g, x: laneX(2), z: PLAYER_Z + 70, hp, maxHp: hp, dead: false, dodgeCD: 0, fireCD: 1.5, phase: 'enter', phaseT: 0, targetLane: 2 };
+    this.sRivalEncounters++; this.rivalEncounterT = 0; this.rivalNoDmg = true; this.rivalHpAtStart = hp;
+    sfxRivalAppear(); this.unlock('rival-encounter');
+  }
+
+  private defeatRival() {
+    if (!this.rival) return;
+    this.rival.dead = true;
+    const pts = 5000 * this.combo;
+    this.score += pts; this.addPopup(this.rival.x, this.rival.z, pts);
+    this.spawnParts(this.rival.x, 0.5, this.rival.z, '#ff0000', 40);
+    this.triggerShake(0.25, 0.5); sfxRivalDefeat();
+    this.sRivalDefeats++; this.totalRivalDefeats++;
+    try { const rd = parseInt(localStorage.getItem('neon-spy-rivalDefeats') || '0') + 1; localStorage.setItem('neon-spy-rivalDefeats', String(rd)); this.career.totalRivalDefeats = rd; if (rd >= 3) this.unlock('rival-defeat-3'); if (rd >= 5) this.unlock('rival-defeat-5'); } catch {}
+    this.unlock('rival-defeat');
+    if (this.rivalNoDmg) this.unlock('rival-nodmg');
+    if (this.rivalEncounterT < 15) this.unlock('rival-quick');
+    if (this.stealthActive) this.unlock('stealth-rival');
+    this.entG.remove(this.rival.mesh);
+    this.rival = null; this.rivalCD = 60;
+  }
+
+  private updateRival(dt: number, time: number) {
+    if (!this.rival || this.rival.dead) return;
+    const r = this.rival; r.phaseT += dt; this.rivalEncounterT += dt;
+    if (r.phase === 'enter') {
+      r.z -= 25 * dt; // Drive in from ahead
+      if (r.z <= PLAYER_Z + 15) { r.phase = 'combat'; r.phaseT = 0; }
+    } else if (r.phase === 'combat') {
+      // Dodge logic — swerve lanes
+      r.dodgeCD -= dt;
+      if (r.dodgeCD <= 0) {
+        r.targetLane = ri(0, LANE_COUNT - 1);
+        r.dodgeCD = rf(1.5, 3);
+        sfxRivalDodge();
+      }
+      const tx = laneX(r.targetLane);
+      r.x += (tx - r.x) * dt * 4;
+      // Slight forward/back weaving
+      const waveZ = PLAYER_Z + 15 + Math.sin(time * 0.8) * 5;
+      r.z += (waveZ - r.z) * dt * 2;
+      // Fire at player if not stealth
+      r.fireCD -= dt;
+      if (r.fireCD <= 0 && !this.stealthActive) {
+        const bm = new Mesh(new BoxGeometry(0.15, 0.15, 0.4), new MeshBasicMaterial({ color: '#ff3333' }));
+        bm.position.set(r.x, 0.4, r.z + 1.5);
+        this.entG.add(bm);
+        this.bullets.push({ mesh: bm, x: r.x, z: r.z + 1.5, fromPlayer: false, speed: -30, dead: false, dx: 0 });
+        sfxEnemyShoot();
+        r.fireCD = rf(0.8, 1.8);
+      }
+      // Flee if low HP
+      if (r.hp <= r.maxHp * 0.25) { r.phase = 'flee'; r.phaseT = 0; }
+      // Despawn if combat takes too long
+      if (r.phaseT > 45) { r.phase = 'flee'; r.phaseT = 0; }
+    } else if (r.phase === 'flee') {
+      r.z += 35 * dt;
+      if (r.z > PLAYER_Z + 90) { this.entG.remove(r.mesh); this.rival = null; this.rivalCD = 60; return; }
+    }
+    r.mesh.position.set(r.x, 0, r.z);
+    // Red pulsing glow
+    if (r.mesh.children[2]) { (r.mesh.children[2] as Mesh).material = new MeshBasicMaterial({ color: '#ff3333', transparent: true, opacity: 0.4 + Math.sin(time * 4) * 0.2 }); }
   }
 
   private spawnParts(x: number, y: number, z: number, c: string, n = 12) {
@@ -1255,6 +1383,8 @@ export class GameSystem extends createSystem({
     this.st(this.statDoc, 'stat-barrels', `Barrels Exploded: ${c.totalBarrels || 0}`);
     this.st(this.statDoc, 'stat-nitros', `Nitros Used: ${c.totalNitros || 0}`);
     try { const fc = localStorage.getItem('neon-spy-formations'); this.st(this.statDoc, 'stat-formations', `Formations Cleared: ${fc || '0'}`); } catch {}
+    this.st(this.statDoc, 'stat-rivals', `Rival Defeats: ${c.totalRivalDefeats || 0}`);
+    this.st(this.statDoc, 'stat-stealths', `Stealth Cloaks: ${c.totalStealths || 0}`);
   }
 
   private modesPlayed = new Set<string>();
@@ -1302,6 +1432,11 @@ export class GameSystem extends createSystem({
     this.highwaySigns = []; this.signCD = 8;
     this.sGunshipKills = 0; this.sTankKills = 0;
     this.bossTypesThisGame.clear();
+    // Round 9 resets
+    if (this.rival) { this.entG.remove(this.rival.mesh); this.rival = null; }
+    this.rivalCD = 0; this.sRivalDefeats = 0; this.sRivalEncounters = 0;
+    this.stealthActive = false; this.stealthTimer = 0; this.stealthCharges = 2; this.sStealthsUsed = 0; this.sStealthKills = 0;
+    this.envTheme = 0; this.envThemesThisGame.clear();
 
     this.modesPlayed.add(this.mode);
     try { const mp = localStorage.getItem('neon-spy-modes'); if (mp) JSON.parse(mp).forEach((m: string) => this.modesPlayed.add(m)); } catch {}
@@ -1336,6 +1471,7 @@ export class GameSystem extends createSystem({
     this.decoys = []; this.empWaves = []; this.jumpRamps = []; this.rainDrops = []; this.isRaining = false;
     this.barrels = []; this.speedZones = []; this.inSpeedZone = false;
     this.oilTrails = []; this.overpasses = []; this.highwaySigns = [];
+    if (this.rival) { this.entG.remove(this.rival.mesh); this.rival = null; }
   }
 
   private pauseG() { this.gState = 'paused'; this.showP('pause'); }
@@ -1371,12 +1507,15 @@ export class GameSystem extends createSystem({
     this.addToLeaderboard(this.score, this.wave);
     if (this.sZoneScore >= 10000) this.unlock('zone-10k');
     if (this.score >= 5000000) this.unlock('score-5m');
+    if (this.wave >= 200) this.unlock('wave-200');
+    this.career.totalStealths += this.sStealthsUsed;
+    if (this.career.totalRivalDefeats >= 5 && this.career.totalStealths >= 5) this.unlock('rival-defeat-stealth-5');
     this.st(this.resDoc, 'result-score', `Score: ${this.score}`); this.st(this.resDoc, 'result-wave', `Wave: ${this.wave}`);
     this.st(this.resDoc, 'result-distance', `Distance: ${Math.floor(this.dist)}m`); this.st(this.resDoc, 'result-combo', `Max Combo: ${this.maxCombo}x`);
     this.st(this.resDoc, 'result-kills', `Kills: ${this.sKills}`);
     this.st(this.resDoc, 'result-weapon', `Weapon: Lv${this.weaponLvl}`);
     this.st(this.resDoc, 'result-extra', `Docks:${this.sDocks} Jumps:${this.sJumps} Missions:${this.sMissionsCompleted} Nitro:${this.sNitrosUsed}`);
-    this.st(this.resDoc, 'result-close', `Close Calls: ${this.sCloseCalls} | Barrels: ${this.sBarrelsExploded} | Zones: ${this.sZonesEntered}`);
+    this.st(this.resDoc, 'result-close', `Close Calls: ${this.sCloseCalls} | Barrels: ${this.sBarrelsExploded} | Zones: ${this.sZonesEntered} | Stealth: ${this.sStealthsUsed} | Rivals: ${this.sRivalDefeats}`);
     this.st(this.resDoc, 'result-best', this.score >= this.career.highScore ? 'NEW HIGH SCORE!' : `Best: ${this.career.highScore}`);
     this.showP('results');
   }
@@ -1468,6 +1607,9 @@ export class GameSystem extends createSystem({
     // Decoy (2 key)
     if (this.keys.has('2') && this.decoyCD <= 0 && this.decoyCharges > 0) { this.deployDecoy(); }
     if (this.decoyCD > 0) this.decoyCD -= dt;
+    // Stealth Cloak (3 key)
+    if (this.keys.has('3') && !this.stealthActive && this.stealthCharges > 0) { this.activateStealth(); }
+    if (this.stealthActive) { this.stealthTimer -= dt; if (this.stealthTimer <= 0) { this.deactivateStealth(); } else { const flicker = 0.15 + Math.sin(time * 8) * 0.05; this.pGroup.traverse(c => { if ((c as any).material) { (c as any).material.transparent = true; (c as any).material.opacity = flicker; } }); } }
     // Pause
     if (this.gpad.b && !this.prevB) { if (this.gState === 'playing') this.pauseG(); else if (this.gState === 'paused') this.resumeG(); }
     this.prevB = this.gpad.b;
@@ -1519,6 +1661,39 @@ export class GameSystem extends createSystem({
     }
     // Recharge gadgets periodically
     if (this.wave % 5 === 0 && this.waveT < dt * 2) { this.empCharges = Math.min(3, this.empCharges + 1); this.decoyCharges = Math.min(4, this.decoyCharges + 1); }
+    // Stealth recharge every 6 waves
+    if (this.wave % 6 === 0 && this.waveT < dt * 2) { this.stealthCharges = Math.min(3, this.stealthCharges + 1); }
+    // Rival Spy Car system
+    if (this.rivalCD > 0) this.rivalCD -= dt;
+    if (!this.rival && this.rivalCD <= 0 && this.wave >= 8 && this.wave % 8 === 0 && this.waveT < dt * 2) { this.spawnRival(); }
+    this.updateRival(dt, time);
+    // Player bullets vs rival
+    if (this.rival && !this.rival.dead) {
+      for (const b of this.bullets) {
+        if (b.dead || !b.fromPlayer) continue;
+        if (Math.abs(b.x - this.rival.x) < 1.2 && Math.abs(b.z - this.rival.z) < 2.5) {
+          b.dead = true; this.rival.hp--; sfxRivalHit();
+          this.spawnParts(b.x, 0.5, b.z, '#ff6666', 6);
+          // Rival dodges more aggressively when hit
+          this.rival.dodgeCD = Math.max(0.3, this.rival.dodgeCD - 0.5);
+          this.rival.targetLane = ri(0, LANE_COUNT - 1);
+          if (this.stealthActive) { this.sStealthKills++; if (this.sStealthKills >= 5) this.unlock('stealth-kill-5'); this.unlock('stealth-kill'); }
+          if (this.rival.hp <= 0) { this.defeatRival(); break; }
+        }
+      }
+    }
+    // Environmental theme rotation (every 15 waves)
+    const newTheme = Math.floor((this.wave - 1) / 15) % 4;
+    if (newTheme !== this.envTheme) {
+      this.envTheme = newTheme;
+      this.envThemesThisGame.add(newTheme);
+      const f = this._scene.fog as FogExp2;
+      if (newTheme === 1) { if (f) f.color.set('#332200'); this.unlock('env-desert'); }
+      else if (newTheme === 2) { if (f) f.color.set('#112233'); this.unlock('env-arctic'); }
+      else if (newTheme === 3) { if (f) f.color.set('#003311'); this.unlock('env-jungle'); }
+      else { if (f) f.color.set(SCHEMES[this.cIdx].bg); }
+      if (this.envThemesThisGame.size >= 4) this.unlock('env-all');
+    }
     // Weapons Truck system
     this.truckCD -= dt;
     if (this.truckCD <= 0 && !this.weaponsTruck && this.wave >= 2) {
@@ -1656,7 +1831,7 @@ export class GameSystem extends createSystem({
       }
     }
     // Nitro boost system
-    if (this.keys.has('3') && !this.nitroActive && this.nitroCharges > 0) { this.fireNitro(); }
+    if (this.keys.has('4') && !this.nitroActive && this.nitroCharges > 0) { this.fireNitro(); }
     if (this.nitroActive) {
       this.nitroTimer -= dt;
       // Nitro trail particles
@@ -2007,15 +2182,15 @@ export class GameSystem extends createSystem({
   private checkColl(time: number) {
     const px = this.pX, pz = PLAYER_Z;
     // Player bullets vs enemies
-    for (const b of this.bullets) { if (b.dead || !b.fromPlayer) continue; for (const e of this.enemies) { if (e.dead || e.dying) continue; const hw = e.type === 'armored' ? 1.8 : e.type === 'tank' ? 2.4 : e.type === 'van' ? 1.4 : e.type === 'helicopter' ? 1.0 : e.type === 'gunship' ? 1.6 : e.type === 'interceptor' ? 0.8 : 0.7; const hd = e.type === 'armored' ? 3.5 : e.type === 'tank' ? 4.5 : e.type === 'van' ? 2.8 : e.type === 'gunship' ? 3.5 : 2.2; if (Math.abs(b.x - e.x) < hw && Math.abs(b.z - e.z) < hd) { b.dead = true; e.hp--; sfxHit(); if (e.hp <= 0) { e.dying = true; e.deathSpin = 0; let pts: number; if (e.type === 'tank') pts = 2000; else if (e.type === 'gunship') pts = 1500; else if (e.type === 'armored') pts = 1000; else if (e.type === 'helicopter') pts = 300; else if (e.type === 'motorcycle') pts = 150; else if (e.type === 'van') pts = 250; else if (e.type === 'interceptor') pts = 350; else pts = 100; const scoreMult = this.inSpeedZone ? this.speedZoneMult : 1; const gained = pts * this.combo * scoreMult; this.score += gained; if (this.inSpeedZone) this.sZoneScore += gained; this.addPopup(e.x, e.z, gained); this.spawnParts(e.x, 0.5, e.z, SCHEMES[this.cIdx].enemy, e.type === 'armored' || e.type === 'tank' || e.type === 'gunship' ? 30 : 15); sfxExplosion(); if (e.type === 'armored' || e.type === 'tank' || e.type === 'gunship') this.triggerShake(0.15, 0.3); this.sKills++; this.career.totalKills++; this.onEnemyKill(e.type, false); if (this.isAirborne) this.unlock('jump-kill'); if (this.nitroActive) this.unlock('nitro-kill'); this.recentKillTimes.push(time); this.recentKillTimes = this.recentKillTimes.filter(t => time - t < 1); if (this.recentKillTimes.length >= 3) this.unlock('multi-kill-3'); this.combo = Math.min(8, this.combo + 1); this.comboT = COMBO_DECAY; if (this.combo > this.maxCombo) this.maxCombo = this.combo; if (this.combo >= 3) { this.unlock('combo-3'); sfxCombo(); } if (this.combo >= 5) this.unlock('combo-5'); if (this.combo >= 8) this.unlock('combo-8'); this.unlock('first-kill'); if (this.sKills >= 10) this.unlock('kills-10'); if (this.sKills >= 25) this.unlock('kills-25'); if (this.sKills >= 50) this.unlock('kills-50'); if (this.sKills >= 100) this.unlock('kills-100'); if (this.sKills >= 200) this.unlock('kills-200'); if (this.sKills >= 300) this.unlock('kills-300'); if (this.sKills >= 500) this.unlock('kills-500'); if (e.type === 'armored') { this.career.totalBoss++; this.unlock('boss-kill'); if (this.career.totalBoss >= 5) this.unlock('boss-5'); if (this.isRaining) this.unlock('rain-boss'); } if (e.type === 'gunship' || e.type === 'tank') { if (this.career.totalBoss >= 5) this.unlock('boss-5'); if (this.isRaining) this.unlock('rain-boss'); if (this.isNight) this.unlock('night-boss'); } if (this.spdBoost) this.unlock('speed-kill'); if (this.isRaining) { this.rainKills++; if (this.rainKills >= 10) this.unlock('rain-kill-10'); } for (const sm of this.smokes) { if (!sm.dead && Math.abs(e.x - sm.x) < 2 && Math.abs(e.z - sm.z) < 3) { this.unlock('smoke-kill'); break; } } } else { this.spawnParts(b.x, 0.5, b.z, '#ffffff', 4); } break; } } }
+    for (const b of this.bullets) { if (b.dead || !b.fromPlayer) continue; for (const e of this.enemies) { if (e.dead || e.dying) continue; const hw = e.type === 'armored' ? 1.8 : e.type === 'tank' ? 2.4 : e.type === 'van' ? 1.4 : e.type === 'helicopter' ? 1.0 : e.type === 'gunship' ? 1.6 : e.type === 'interceptor' ? 0.8 : 0.7; const hd = e.type === 'armored' ? 3.5 : e.type === 'tank' ? 4.5 : e.type === 'van' ? 2.8 : e.type === 'gunship' ? 3.5 : 2.2; if (Math.abs(b.x - e.x) < hw && Math.abs(b.z - e.z) < hd) { b.dead = true; e.hp--; sfxHit(); if (e.hp <= 0) { e.dying = true; e.deathSpin = 0; let pts: number; if (e.type === 'tank') pts = 2000; else if (e.type === 'gunship') pts = 1500; else if (e.type === 'armored') pts = 1000; else if (e.type === 'helicopter') pts = 300; else if (e.type === 'motorcycle') pts = 150; else if (e.type === 'van') pts = 250; else if (e.type === 'interceptor') pts = 350; else pts = 100; const scoreMult = this.inSpeedZone ? this.speedZoneMult : 1; const gained = pts * this.combo * scoreMult; this.score += gained; if (this.inSpeedZone) this.sZoneScore += gained; this.addPopup(e.x, e.z, gained); this.spawnParts(e.x, 0.5, e.z, SCHEMES[this.cIdx].enemy, e.type === 'armored' || e.type === 'tank' || e.type === 'gunship' ? 30 : 15); sfxExplosion(); if (e.type === 'armored' || e.type === 'tank' || e.type === 'gunship') this.triggerShake(0.15, 0.3); this.sKills++; this.career.totalKills++; this.onEnemyKill(e.type, false); if (this.isAirborne) this.unlock('jump-kill'); if (this.nitroActive) this.unlock('nitro-kill'); this.recentKillTimes.push(time); this.recentKillTimes = this.recentKillTimes.filter(t => time - t < 1); if (this.recentKillTimes.length >= 3) this.unlock('multi-kill-3'); this.combo = Math.min(8, this.combo + 1); this.comboT = COMBO_DECAY; if (this.combo > this.maxCombo) this.maxCombo = this.combo; if (this.combo >= 3) { this.unlock('combo-3'); sfxCombo(); } if (this.combo >= 5) this.unlock('combo-5'); if (this.combo >= 8) this.unlock('combo-8'); this.unlock('first-kill'); if (this.sKills >= 10) this.unlock('kills-10'); if (this.sKills >= 25) this.unlock('kills-25'); if (this.sKills >= 50) this.unlock('kills-50'); if (this.sKills >= 100) this.unlock('kills-100'); if (this.sKills >= 200) this.unlock('kills-200'); if (this.sKills >= 300) this.unlock('kills-300'); if (this.sKills >= 500) this.unlock('kills-500'); if (e.type === 'armored') { this.career.totalBoss++; this.unlock('boss-kill'); if (this.career.totalBoss >= 5) this.unlock('boss-5'); if (this.isRaining) this.unlock('rain-boss'); } if (e.type === 'gunship' || e.type === 'tank') { if (this.career.totalBoss >= 5) this.unlock('boss-5'); if (this.isRaining) this.unlock('rain-boss'); if (this.isNight) this.unlock('night-boss'); } if (this.spdBoost) this.unlock('speed-kill'); if (this.stealthActive) { this.sStealthKills++; this.unlock('stealth-kill'); if (this.sStealthKills >= 5) this.unlock('stealth-kill-5'); } if (this.isRaining) { this.rainKills++; if (this.rainKills >= 10) this.unlock('rain-kill-10'); } for (const sm of this.smokes) { if (!sm.dead && Math.abs(e.x - sm.x) < 2 && Math.abs(e.z - sm.z) < 3) { this.unlock('smoke-kill'); break; } } } else { this.spawnParts(b.x, 0.5, b.z, '#ffffff', 4); } break; } } }
     // Player bullets vs barrels
     for (const b of this.bullets) { if (b.dead || !b.fromPlayer) continue; for (const br of this.barrels) { if (br.dead) continue; if (Math.abs(b.x - br.x) < 0.8 && Math.abs(b.z - br.z) < 1.2) { b.dead = true; this.explodeBarrel(br, 0); break; } } }
     // Skip body collisions when airborne
     if (!this.isAirborne) {
     // Enemy bullets vs player
-    if (this.invT <= 0) { for (const b of this.bullets) { if (b.dead || b.fromPlayer) continue; if (Math.abs(b.x - px) < 0.8 && Math.abs(b.z - pz) < 1.5) { b.dead = true; if (this.pShield) { this.pShield = false; (this.shieldM.material as MeshBasicMaterial).opacity = 0; sfxShield(); this.spawnParts(px, 0.5, pz, SCHEMES[this.cIdx].powerup, 10); } else { this.pHit(); } } } }
+    if (this.invT <= 0 && !this.stealthActive) { for (const b of this.bullets) { if (b.dead || b.fromPlayer) continue; if (Math.abs(b.x - px) < 0.8 && Math.abs(b.z - pz) < 1.5) { b.dead = true; if (this.pShield) { this.pShield = false; (this.shieldM.material as MeshBasicMaterial).opacity = 0; sfxShield(); this.spawnParts(px, 0.5, pz, SCHEMES[this.cIdx].powerup, 10); } else { this.pHit(); } } } }
     // Enemy body vs player
-    if (this.invT <= 0) { for (const e of this.enemies) { if (e.dead || e.dying) continue; const hw = e.type === 'armored' ? 1.6 : e.type === 'tank' ? 2.2 : e.type === 'van' ? 1.3 : e.type === 'gunship' ? 1.4 : 0.9; if (Math.abs(px - e.x) < hw && Math.abs(pz - e.z) < 2.0) { if (this.pShield) { e.dying = true; e.deathSpin = 0; this.pShield = false; (this.shieldM.material as MeshBasicMaterial).opacity = 0; this.spawnParts(e.x, 0.5, e.z, SCHEMES[this.cIdx].enemy, 15); sfxExplosion(); } else { this.pHit(); } } } }
+    if (this.invT <= 0 && !this.stealthActive) { for (const e of this.enemies) { if (e.dead || e.dying) continue; const hw = e.type === 'armored' ? 1.6 : e.type === 'tank' ? 2.2 : e.type === 'van' ? 1.3 : e.type === 'gunship' ? 1.4 : 0.9; if (Math.abs(px - e.x) < hw && Math.abs(pz - e.z) < 2.0) { if (this.pShield) { e.dying = true; e.deathSpin = 0; this.pShield = false; (this.shieldM.material as MeshBasicMaterial).opacity = 0; this.spawnParts(e.x, 0.5, e.z, SCHEMES[this.cIdx].enemy, 15); sfxExplosion(); } else { this.pHit(); } } } }
     // Civilian collision
     if (this.invT <= 0) { for (const c of this.civs) { if (c.dead) continue; if (Math.abs(px - c.x) < 0.9 && Math.abs(pz - c.z) < 2.0) { c.dead = true; this.sCivHits++; sfxCivHit(); this.spawnParts(c.x, 0.5, c.z, SCHEMES[this.cIdx].civilian, 8); this.score = Math.max(0, this.score - 200); this.addPopup(c.x, c.z, -200); this.combo = 1; } } }
     // Road hazard collision
@@ -2047,7 +2222,7 @@ export class GameSystem extends createSystem({
   private pHit() {
     if (this.mode === 'zen') return; this.lives--; sfxDeath(); this.spawnParts(this.pX, 0.5, PLAYER_Z, SCHEMES[this.cIdx].primary, 20);
     this.invT = 2; this.combo = 1; this.weaponLvl = Math.max(0, this.weaponLvl - 1); this.waveNoDmg = false; this.consecutivePerfect = 0;
-    this.missionNoDmg = false; this.triggerShake(0.12, 0.25); if (this.lives <= 0) this.gameOver();
+    this.missionNoDmg = false; this.rivalNoDmg = false; this.triggerShake(0.12, 0.25); if (this.lives <= 0) this.gameOver();
   }
 
   private spawnE() {
@@ -2098,14 +2273,18 @@ export class GameSystem extends createSystem({
     const st = this.pShield ? `Shield: ${Math.ceil(this.shieldT)}s` : ''; const rt = this.rapidF ? `Rapid: ${Math.ceil(this.rapidT)}s` : ''; const spt = this.spdBoost ? `Speed: ${Math.ceil(this.spdT)}s` : '';
     this.st(this.hudDoc, 'powerup-status', [st, rt, spt].filter(Boolean).join(' | '));
     // Gadget and heat display
-    const gadgetStr = `EMP:${this.empCharges} Decoy:${this.decoyCharges}`;
+    const gadgetStr = `EMP:${this.empCharges} Decoy:${this.decoyCharges} Stl:${this.stealthCharges}`;
     const heatStr = this.heatLevel > 0 ? ` | Heat:${'!'.repeat(Math.min(7, Math.floor(this.heatLevel)))}` : '';
     const nightStr = this.isNight ? ' | NIGHT' : '';
     const rainStr = this.isRaining ? ' | RAIN' : '';
     const airStr = this.isAirborne ? ' | AIRBORNE' : '';
     const zoneStr = this.inSpeedZone ? ' | 2x ZONE' : '';
     const nitroStr = this.nitroActive ? ' | NITRO!' : '';
-    this.st(this.hudDoc, 'gadget-status', gadgetStr + heatStr + nightStr + rainStr + airStr + zoneStr + nitroStr);
+    const stealthStr = this.stealthActive ? ' | STEALTH' : '';
+    const rivalStr = this.rival && !this.rival.dead ? ` | RIVAL HP:${this.rival.hp}/${this.rival.maxHp}` : '';
+    const envNames = ['HIGHWAY', 'DESERT', 'ARCTIC', 'JUNGLE'];
+    const envStr = this.envTheme > 0 ? ` | ${envNames[this.envTheme]}` : '';
+    this.st(this.hudDoc, 'gadget-status', gadgetStr + heatStr + nightStr + rainStr + airStr + zoneStr + nitroStr + stealthStr + rivalStr + envStr);
     this.st(this.hudDoc, 'nitro-status', `Nitro: ${'*'.repeat(this.nitroCharges)} | Close: ${this.sCloseCalls}`);
     if (this.mode === 'speed') this.st(this.hudDoc, 'mode-info', `Time: ${Math.ceil(120 - this.gTime)}s`);
     else if (this.mode === 'challenge') this.st(this.hudDoc, 'mode-info', `Moves: ${500 - this.moves}`);

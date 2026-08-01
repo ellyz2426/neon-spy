@@ -9,7 +9,8 @@
       <div font-size="9" color="#aaaaaa">R: Deploy smoke screen</div>
       <div font-size="9" color="#00ccff">1: Fire EMP blast (stuns enemies)</div>
       <div font-size="9" color="#00ccff">2: Deploy holographic decoy</div>
-      <div font-size="9" color="#ff6600">3: Nitro boost (3 charges)</div>
+      <div font-size="9" color="#9900ff">3: Stealth cloak (invisible 3s, 2 charges)</div>
+      <div font-size="9" color="#ff6600">4: Nitro boost (3 charges)</div>
       <div font-size="9" color="#aaaaaa">Esc/P: Pause</div>
       <div font-size="10" color="#ffffff" margin-top="4">-- VR Controller --</div>
       <div font-size="9" color="#aaaaaa">Thumbstick: Steer</div>
@@ -44,6 +45,9 @@
       <div font-size="9" color="#4488ff">Rain reduces visibility — stay sharp!</div>
       <div font-size="9" color="#334400">Speed boost leaves oil trail that damages enemies!</div>
       <div font-size="9" color="#ff00ff">Unlock car styles in Settings (wave/kill/mission milestones)</div>
+      <div font-size="9" color="#ff3333">Red rival spy car appears every 8 waves — high reward!</div>
+      <div font-size="9" color="#9900ff">3: Stealth cloak (invisible 3s, 2 charges)</div>
+      <div font-size="9" color="#886644">Road themes change every 15 waves (Desert/Arctic/Jungle)</div>
       <div font-size="9" color="#aaaaaa">Chain kills for combo multiplier</div>
     </div>
     <div name="btn-tutorial-back" font-size="11" color="#ffffff" background-color="#555555" border-radius="10" padding-top="5" padding-bottom="5" padding-left="14" padding-right="14" margin-top="4" cursor="pointer">Back</div>
