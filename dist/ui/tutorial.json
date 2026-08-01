@@ -294,6 +294,30 @@
                 "type": "container",
                 "sourceTag": "div",
                 "children": [
+                  "Gunship Boss: Hovers, bullet patterns (8+ HP)"
+                ],
+                "properties": {
+                  "fontSize": "9",
+                  "color": "#cc0000"
+                },
+                "dataUid": "uid-27"
+              },
+              {
+                "type": "container",
+                "sourceTag": "div",
+                "children": [
+                  "Tank Boss: Huge, explosive shells (12+ HP, every 10 waves)"
+                ],
+                "properties": {
+                  "fontSize": "9",
+                  "color": "#666666"
+                },
+                "dataUid": "uid-28"
+              },
+              {
+                "type": "container",
+                "sourceTag": "div",
+                "children": [
                   "-- Tips --"
                 ],
                 "properties": {
@@ -301,7 +325,7 @@
                   "color": "#ffffff",
                   "marginTop": "4"
                 },
-                "dataUid": "uid-27"
+                "dataUid": "uid-29"
               },
               {
                 "type": "container",
@@ -313,7 +337,7 @@
                   "fontSize": "9",
                   "color": "#33ff33"
                 },
-                "dataUid": "uid-28"
+                "dataUid": "uid-30"
               },
               {
                 "type": "container",
@@ -325,7 +349,7 @@
                   "fontSize": "9",
                   "color": "#ffff00"
                 },
-                "dataUid": "uid-29"
+                "dataUid": "uid-31"
               },
               {
                 "type": "container",
@@ -337,7 +361,7 @@
                   "fontSize": "9",
                   "color": "#ff00ff"
                 },
-                "dataUid": "uid-30"
+                "dataUid": "uid-32"
               },
               {
                 "type": "container",
@@ -349,7 +373,7 @@
                   "fontSize": "9",
                   "color": "#00ff88"
                 },
-                "dataUid": "uid-31"
+                "dataUid": "uid-33"
               },
               {
                 "type": "container",
@@ -361,7 +385,7 @@
                   "fontSize": "9",
                   "color": "#aaaaaa"
                 },
-                "dataUid": "uid-32"
+                "dataUid": "uid-34"
               },
               {
                 "type": "container",
@@ -373,7 +397,7 @@
                   "fontSize": "9",
                   "color": "#aaaaaa"
                 },
-                "dataUid": "uid-33"
+                "dataUid": "uid-35"
               },
               {
                 "type": "container",
@@ -385,7 +409,7 @@
                   "fontSize": "9",
                   "color": "#00ccff"
                 },
-                "dataUid": "uid-34"
+                "dataUid": "uid-36"
               },
               {
                 "type": "container",
@@ -397,7 +421,7 @@
                   "fontSize": "9",
                   "color": "#00ccff"
                 },
-                "dataUid": "uid-35"
+                "dataUid": "uid-37"
               },
               {
                 "type": "container",
@@ -409,7 +433,7 @@
                   "fontSize": "9",
                   "color": "#ff6600"
                 },
-                "dataUid": "uid-36"
+                "dataUid": "uid-38"
               },
               {
                 "type": "container",
@@ -421,7 +445,7 @@
                   "fontSize": "9",
                   "color": "#ff4400"
                 },
-                "dataUid": "uid-37"
+                "dataUid": "uid-39"
               },
               {
                 "type": "container",
@@ -433,7 +457,7 @@
                   "fontSize": "9",
                   "color": "#00ff88"
                 },
-                "dataUid": "uid-38"
+                "dataUid": "uid-40"
               },
               {
                 "type": "container",
@@ -445,7 +469,7 @@
                   "fontSize": "9",
                   "color": "#ffaa00"
                 },
-                "dataUid": "uid-39"
+                "dataUid": "uid-41"
               },
               {
                 "type": "container",
@@ -457,7 +481,7 @@
                   "fontSize": "9",
                   "color": "#0088ff"
                 },
-                "dataUid": "uid-40"
+                "dataUid": "uid-42"
               },
               {
                 "type": "container",
@@ -469,7 +493,7 @@
                   "fontSize": "9",
                   "color": "#ffff00"
                 },
-                "dataUid": "uid-41"
+                "dataUid": "uid-43"
               },
               {
                 "type": "container",
@@ -481,7 +505,31 @@
                   "fontSize": "9",
                   "color": "#4488ff"
                 },
-                "dataUid": "uid-42"
+                "dataUid": "uid-44"
+              },
+              {
+                "type": "container",
+                "sourceTag": "div",
+                "children": [
+                  "Speed boost leaves oil trail that damages enemies!"
+                ],
+                "properties": {
+                  "fontSize": "9",
+                  "color": "#334400"
+                },
+                "dataUid": "uid-45"
+              },
+              {
+                "type": "container",
+                "sourceTag": "div",
+                "children": [
+                  "Unlock car styles in Settings (wave/kill/mission milestones)"
+                ],
+                "properties": {
+                  "fontSize": "9",
+                  "color": "#ff00ff"
+                },
+                "dataUid": "uid-46"
               },
               {
                 "type": "container",
@@ -493,7 +541,7 @@
                   "fontSize": "9",
                   "color": "#aaaaaa"
                 },
-                "dataUid": "uid-43"
+                "dataUid": "uid-47"
               }
             ],
             "properties": {
@@ -522,7 +570,7 @@
               "marginTop": "4",
               "cursor": "pointer"
             },
-            "dataUid": "uid-44"
+            "dataUid": "uid-48"
           }
         ],
         "properties": {
@@ -547,7 +595,7 @@
         "column": 0
       },
       "end": {
-        "line": 46,
+        "line": 50,
         "column": 8
       }
     },
@@ -557,7 +605,7 @@
         "column": 2
       },
       "end": {
-        "line": 45,
+        "line": 49,
         "column": 8
       }
     },
@@ -577,7 +625,7 @@
         "column": 4
       },
       "end": {
-        "line": 43,
+        "line": 47,
         "column": 10
       }
     },
@@ -808,7 +856,7 @@
       },
       "end": {
         "line": 26,
-        "column": 73
+        "column": 92
       }
     },
     "uid-28": {
@@ -818,7 +866,7 @@
       },
       "end": {
         "line": 27,
-        "column": 80
+        "column": 105
       }
     },
     "uid-29": {
@@ -828,7 +876,7 @@
       },
       "end": {
         "line": 28,
-        "column": 77
+        "column": 73
       }
     },
     "uid-30": {
@@ -838,7 +886,7 @@
       },
       "end": {
         "line": 29,
-        "column": 76
+        "column": 80
       }
     },
     "uid-31": {
@@ -848,7 +896,7 @@
       },
       "end": {
         "line": 30,
-        "column": 81
+        "column": 77
       }
     },
     "uid-32": {
@@ -858,7 +906,7 @@
       },
       "end": {
         "line": 31,
-        "column": 77
+        "column": 76
       }
     },
     "uid-33": {
@@ -868,7 +916,7 @@
       },
       "end": {
         "line": 32,
-        "column": 77
+        "column": 81
       }
     },
     "uid-34": {
@@ -878,7 +926,7 @@
       },
       "end": {
         "line": 33,
-        "column": 85
+        "column": 77
       }
     },
     "uid-35": {
@@ -888,7 +936,7 @@
       },
       "end": {
         "line": 34,
-        "column": 83
+        "column": 77
       }
     },
     "uid-36": {
@@ -898,7 +946,7 @@
       },
       "end": {
         "line": 35,
-        "column": 78
+        "column": 85
       }
     },
     "uid-37": {
@@ -908,7 +956,7 @@
       },
       "end": {
         "line": 36,
-        "column": 82
+        "column": 83
       }
     },
     "uid-38": {
@@ -918,7 +966,7 @@
       },
       "end": {
         "line": 37,
-        "column": 83
+        "column": 78
       }
     },
     "uid-39": {
@@ -928,7 +976,7 @@
       },
       "end": {
         "line": 38,
-        "column": 80
+        "column": 82
       }
     },
     "uid-40": {
@@ -938,7 +986,7 @@
       },
       "end": {
         "line": 39,
-        "column": 90
+        "column": 83
       }
     },
     "uid-41": {
@@ -948,7 +996,7 @@
       },
       "end": {
         "line": 40,
-        "column": 87
+        "column": 80
       }
     },
     "uid-42": {
@@ -958,7 +1006,7 @@
       },
       "end": {
         "line": 41,
-        "column": 84
+        "column": 90
       }
     },
     "uid-43": {
@@ -968,16 +1016,56 @@
       },
       "end": {
         "line": 42,
-        "column": 79
+        "column": 87
       }
     },
     "uid-44": {
       "start": {
+        "line": 43,
+        "column": 6
+      },
+      "end": {
+        "line": 43,
+        "column": 84
+      }
+    },
+    "uid-45": {
+      "start": {
         "line": 44,
-        "column": 4
+        "column": 6
       },
       "end": {
         "line": 44,
+        "column": 97
+      }
+    },
+    "uid-46": {
+      "start": {
+        "line": 45,
+        "column": 6
+      },
+      "end": {
+        "line": 45,
+        "column": 107
+      }
+    },
+    "uid-47": {
+      "start": {
+        "line": 46,
+        "column": 6
+      },
+      "end": {
+        "line": 46,
+        "column": 79
+      }
+    },
+    "uid-48": {
+      "start": {
+        "line": 48,
+        "column": 4
+      },
+      "end": {
+        "line": 48,
         "column": 225
       }
     }

@@ -32,7 +32,7 @@ const SCHEMES: ColorScheme[] = [
   { name: 'Gold',    primary: '#ffcc00', accent: '#00ccff', bg: '#111100', enemy: '#ff3366', civilian: '#66ff66', powerup: '#ff9900' },
 ];
 
-interface EnemyCar { mesh: Group; x: number; z: number; speed: number; type: 'sedan'|'motorcycle'|'helicopter'|'armored'|'van'|'interceptor'; hp: number; fireTimer: number; dead: boolean; targetLane: number; laneChangeT: number; deathSpin: number; dying: boolean; mineCD: number; }
+interface EnemyCar { mesh: Group; x: number; z: number; speed: number; type: 'sedan'|'motorcycle'|'helicopter'|'armored'|'van'|'interceptor'|'gunship'|'tank'; hp: number; fireTimer: number; dead: boolean; targetLane: number; laneChangeT: number; deathSpin: number; dying: boolean; mineCD: number; bossPattern: number; }
 interface CivilianCar { mesh: Group; x: number; z: number; speed: number; dead: boolean; }
 interface Bullet { mesh: Mesh; x: number; z: number; fromPlayer: boolean; speed: number; dead: boolean; dx: number; }
 interface PowerUpObj { mesh: Group; x: number; z: number; type: 'missile'|'oilslick'|'shield'|'speed'|'rapid'|'weapon'; dead: boolean; rotY: number; }
@@ -55,6 +55,9 @@ interface JumpRamp { mesh: Group; x: number; z: number; dead: boolean; }
 interface ExplosiveBarrel { mesh: Group; x: number; z: number; dead: boolean; chainTimer: number; }
 interface SpeedZoneSeg { mesh: Mesh; z: number; dead: boolean; mult: number; }
 interface LeaderEntry { score: number; wave: number; date: string; }
+interface OilTrailSeg { mesh: Mesh; x: number; z: number; timer: number; dead: boolean; }
+interface OverpassObj { mesh: Group; z: number; }
+interface HighwaySign { mesh: Group; z: number; side: number; }
 
 const ROAD_WIDTH = 12; const LANE_COUNT = 5; const LANE_WIDTH = ROAD_WIDTH / LANE_COUNT;
 const ROAD_SEG_LEN = 40; const ROAD_VIS = 8; const PLAYER_Z = -8;
@@ -102,6 +105,11 @@ function sfxCloseCall() { tone(1320, 0.06, 'sine', 0.06); tone(1760, 0.08, 'sine
 function sfxBarrelExplode() { tone(60, 0.5, 'sawtooth', 0.18); tone(40, 0.6, 'square', 0.12); setTimeout(() => tone(30, 0.4, 'sawtooth', 0.1), 100); }
 function sfxNitro() { tone(200, 0.15, 'sawtooth', 0.1); tone(300, 0.12, 'triangle', 0.08); setTimeout(() => tone(400, 0.1, 'sine', 0.06), 50); }
 function sfxZoneEnter() { tone(600, 0.1, 'sine', 0.08); tone(800, 0.08, 'sine', 0.06); }
+function sfxGunshipFire() { tone(180, 0.12, 'sawtooth', 0.1); tone(260, 0.08, 'square', 0.06); setTimeout(() => tone(180, 0.1, 'sawtooth', 0.06), 60); }
+function sfxTankFire() { tone(50, 0.5, 'sawtooth', 0.18); tone(35, 0.6, 'square', 0.12); setTimeout(() => tone(80, 0.3, 'sawtooth', 0.08), 80); }
+function sfxTankBoss() { tone(100, 0.4, 'square', 0.14); tone(60, 0.6, 'sawtooth', 0.12); setTimeout(() => tone(40, 0.4, 'square', 0.1), 150); }
+function sfxOilTrail() { tone(160, 0.15, 'triangle', 0.06); tone(120, 0.2, 'triangle', 0.04); }
+function sfxCarSwitch() { tone(500, 0.08, 'sine', 0.08); setTimeout(() => tone(700, 0.08, 'sine', 0.08), 50); }
 
 let mosc1: OscillatorNode|null = null, mosc2: OscillatorNode|null = null, mosc3: OscillatorNode|null = null;
 let mgain: GainNode|null = null, mgain2: GainNode|null = null, mgain3: GainNode|null = null;
@@ -207,6 +215,14 @@ export class GameSystem extends createSystem({
   private speedZones: SpeedZoneSeg[] = []; private speedZoneCD = 0; private inSpeedZone = false; private speedZoneMult = 1; private sZoneScore = 0; private sZonesEntered = 0;
   private nitroCharges = 3; private nitroActive = false; private nitroTimer = 0; private sNitrosUsed = 0;
   private leaderboard: LeaderEntry[] = []; private sBarrelsExploded = 0; private sBarrelKills = 0;
+  // Round 8: Boss variety, Car customization, Highway signs/overpasses, Oil trail
+  private carStyle = 0; // 0=Default, 1=Sleek, 2=Muscle, 3=Stealth
+  private unlockedCars: number[] = [0]; // Always have default
+  private oilTrails: OilTrailSeg[] = []; private oilTrailCD = 0; private sOilTrailKills = 0;
+  private overpasses: OverpassObj[] = []; private overpassCD = 25; private sOverpasses = 0;
+  private highwaySigns: HighwaySign[] = []; private signCD = 8;
+  private sGunshipKills = 0; private sTankKills = 0;
+  private bossTypesThisGame = new Set<string>();
 
   private st(doc: UIKitDocument|null, id: string, text: string) { if (!doc) return; (doc.getElementById(id) as UIKit.Text|undefined)?.setProperties({ text }); }
   private sv(e: Entity, v: boolean) { try { const o = (e as any).object3D; if (o) { const s = v ? 3 : 0; o.scale.set(s, s, s); } } catch {} }
@@ -217,8 +233,10 @@ export class GameSystem extends createSystem({
     this.loadData(); this.initAchs(); this.buildEnv(); this.buildPlayer(); this.createRoad(); this.setupInput(); this.setupPanels(); this.showP('menu');
   }
 
-  private loadData() { try { const s = localStorage.getItem('neon-spy-career'); if (s) this.career = { ...this.career, ...JSON.parse(s) }; const a = localStorage.getItem('neon-spy-achs'); if (a) { (JSON.parse(a) as string[]).forEach(id => { const x = this.achs.find(v => v.id === id); if (x) x.unlocked = true; }); } const c = localStorage.getItem('neon-spy-color'); if (c) this.cIdx = parseInt(c) || 0; this.loadLeaderboard(); } catch {} }
+  private loadData() { try { const s = localStorage.getItem('neon-spy-career'); if (s) this.career = { ...this.career, ...JSON.parse(s) }; const a = localStorage.getItem('neon-spy-achs'); if (a) { (JSON.parse(a) as string[]).forEach(id => { const x = this.achs.find(v => v.id === id); if (x) x.unlocked = true; }); } const c = localStorage.getItem('neon-spy-color'); if (c) this.cIdx = parseInt(c) || 0; this.loadCarData(); this.loadLeaderboard(); } catch {} }
   private saveData() { try { localStorage.setItem('neon-spy-career', JSON.stringify(this.career)); localStorage.setItem('neon-spy-achs', JSON.stringify(this.achs.filter(a => a.unlocked).map(a => a.id))); localStorage.setItem('neon-spy-color', String(this.cIdx)); } catch {} }
+  private loadCarData() { try { const cs = localStorage.getItem('neon-spy-carStyle'); if (cs) this.carStyle = parseInt(cs) || 0; const uc = localStorage.getItem('neon-spy-unlockedCars'); if (uc) this.unlockedCars = JSON.parse(uc); if (!this.unlockedCars.includes(0)) this.unlockedCars.push(0); } catch {} }
+  private saveCarData() { try { localStorage.setItem('neon-spy-carStyle', String(this.carStyle)); localStorage.setItem('neon-spy-unlockedCars', JSON.stringify(this.unlockedCars)); } catch {} }
 
 
   private initAchs() {
@@ -357,6 +375,19 @@ export class GameSystem extends createSystem({
       { id: 'score-2m', name: 'Multi-Millionaire', desc: 'Score 2,000,000 points', unlocked: false },
       { id: 'kills-500', name: 'Annihilator', desc: '500 enemies in one game', unlocked: false },
       { id: 'wave-100', name: 'Centurion', desc: 'Reach wave 100', unlocked: false },
+      // Round 8 achievements (12 new — total 140)
+      { id: 'gunship-kill', name: 'Gunship Down', desc: 'Destroy a gunship boss', unlocked: false },
+      { id: 'tank-kill', name: 'Tank Buster', desc: 'Destroy a tank boss', unlocked: false },
+      { id: 'tank-kills-3', name: 'Tank Ace', desc: 'Destroy 3 tanks total', unlocked: false },
+      { id: 'all-bosses', name: 'Boss Collector', desc: 'Kill armored, gunship, and tank in one game', unlocked: false },
+      { id: 'oil-trail-kill', name: 'Slick Trail', desc: 'Kill enemy with oil trail', unlocked: false },
+      { id: 'oil-trail-5', name: 'Trail Blazer', desc: 'Kill 5 enemies with oil trails', unlocked: false },
+      { id: 'car-sleek', name: 'Sleek Machine', desc: 'Unlock the Sleek car (wave 20)', unlocked: false },
+      { id: 'car-muscle', name: 'Muscle Bound', desc: 'Unlock the Muscle car (100 kills)', unlocked: false },
+      { id: 'car-stealth', name: 'Ghost Ride', desc: 'Unlock the Stealth car (10 missions)', unlocked: false },
+      { id: 'overpass-10', name: 'Underpass Pro', desc: 'Drive under 10 overpasses', unlocked: false },
+      { id: 'wave-150', name: 'Transcendent', desc: 'Reach wave 150', unlocked: false },
+      { id: 'score-5m', name: 'Tycoon', desc: 'Score 5,000,000 points', unlocked: false },
     ];
     try { const a = localStorage.getItem('neon-spy-achs'); if (a) { (JSON.parse(a) as string[]).forEach(id => { const x = this.achs.find(v => v.id === id); if (x) x.unlocked = true; }); } } catch {}
   }
@@ -463,12 +494,39 @@ export class GameSystem extends createSystem({
 
   private buildPlayer() {
     const sc = SCHEMES[this.cIdx]; this.pGroup = new Group();
-    const body = sbox(1.2, 0.35, 2.4, sc.primary, 0.7); body.position.y = 0.35; this.pGroup.add(body);
-    const can = sbox(0.8, 0.25, 1.2, sc.primary, 0.4); can.position.set(0, 0.65, -0.2); this.pGroup.add(can);
-    const sp = sbox(1.4, 0.08, 0.3, sc.accent, 0.6); sp.position.set(0, 0.2, 1.2); this.pGroup.add(sp);
-    const rs = sbox(1.0, 0.15, 0.15, sc.accent, 0.5); rs.position.set(0, 0.6, -1.2); this.pGroup.add(rs);
-    for (const sx of [-0.4, 0.4]) { const gn = sbox(0.08, 0.08, 0.5, sc.accent, 0.8); gn.position.set(sx, 0.3, 1.4); this.pGroup.add(gn); }
-    for (const [wx, wz] of [[-0.65, 0.7], [0.65, 0.7], [-0.65, -0.7], [0.65, -0.7]]) { const w = new Mesh(new TorusGeometry(0.18, 0.06, 6, 8), new MeshBasicMaterial({ color: sc.accent, wireframe: true })); w.rotation.y = Math.PI / 2; w.position.set(wx, 0.18, wz); this.pGroup.add(w); }
+    if (this.carStyle === 1) {
+      // Sleek — narrow, low-profile, aerodynamic
+      const body = sbox(1.0, 0.28, 2.8, '#00bbff', 0.7); body.position.y = 0.28; this.pGroup.add(body);
+      const can = sbox(0.6, 0.2, 1.4, '#00bbff', 0.4); can.position.set(0, 0.52, -0.3); this.pGroup.add(can);
+      const sp = sbox(1.1, 0.06, 0.25, sc.accent, 0.6); sp.position.set(0, 0.15, 1.4); this.pGroup.add(sp);
+      const rs = sbox(0.5, 0.12, 0.1, sc.accent, 0.5); rs.position.set(0, 0.5, -1.4); this.pGroup.add(rs);
+      for (const sx of [-0.3, 0.3]) { const gn = sbox(0.06, 0.06, 0.4, sc.accent, 0.8); gn.position.set(sx, 0.25, 1.5); this.pGroup.add(gn); }
+      for (const [wx, wz] of [[-0.55, 0.7], [0.55, 0.7], [-0.55, -0.8], [0.55, -0.8]]) { const w = new Mesh(new TorusGeometry(0.16, 0.05, 6, 8), new MeshBasicMaterial({ color: '#00bbff', wireframe: true })); w.rotation.y = Math.PI / 2; w.position.set(wx, 0.16, wz); this.pGroup.add(w); }
+    } else if (this.carStyle === 2) {
+      // Muscle — wider, heavier, imposing
+      const body = sbox(1.5, 0.4, 2.6, '#ff4400', 0.7); body.position.y = 0.4; this.pGroup.add(body);
+      const can = sbox(1.0, 0.3, 1.0, '#ff4400', 0.4); can.position.set(0, 0.75, -0.1); this.pGroup.add(can);
+      const sp = sbox(1.6, 0.1, 0.35, '#ffcc00', 0.6); sp.position.set(0, 0.22, 1.3); this.pGroup.add(sp);
+      const hood = sbox(0.5, 0.15, 0.8, '#ff6600', 0.5); hood.position.set(0, 0.55, 0.8); this.pGroup.add(hood);
+      for (const sx of [-0.5, 0.5]) { const gn = sbox(0.1, 0.1, 0.5, '#ffcc00', 0.8); gn.position.set(sx, 0.35, 1.4); this.pGroup.add(gn); }
+      for (const [wx, wz] of [[-0.8, 0.7], [0.8, 0.7], [-0.8, -0.7], [0.8, -0.7]]) { const w = new Mesh(new TorusGeometry(0.22, 0.08, 6, 8), new MeshBasicMaterial({ color: '#ff6600', wireframe: true })); w.rotation.y = Math.PI / 2; w.position.set(wx, 0.22, wz); this.pGroup.add(w); }
+    } else if (this.carStyle === 3) {
+      // Stealth — dark, angular, aggressive
+      const body = sbox(1.1, 0.3, 2.5, '#222244', 0.8); body.position.y = 0.3; this.pGroup.add(body);
+      const can = sbox(0.7, 0.22, 1.3, '#222244', 0.5); can.position.set(0, 0.58, -0.3); this.pGroup.add(can);
+      const sp = sbox(1.3, 0.06, 0.2, '#4444ff', 0.7); sp.position.set(0, 0.18, 1.3); this.pGroup.add(sp);
+      const rs = sbox(1.0, 0.1, 0.12, '#4444ff', 0.6); rs.position.set(0, 0.55, -1.25); this.pGroup.add(rs);
+      for (const sx of [-0.35, 0.35]) { const gn = sbox(0.06, 0.06, 0.5, '#4444ff', 0.9); gn.position.set(sx, 0.28, 1.5); this.pGroup.add(gn); }
+      for (const [wx, wz] of [[-0.6, 0.7], [0.6, 0.7], [-0.6, -0.7], [0.6, -0.7]]) { const w = new Mesh(new TorusGeometry(0.18, 0.06, 6, 8), new MeshBasicMaterial({ color: '#4444ff', wireframe: true })); w.rotation.y = Math.PI / 2; w.position.set(wx, 0.18, wz); this.pGroup.add(w); }
+    } else {
+      // Default car
+      const body = sbox(1.2, 0.35, 2.4, sc.primary, 0.7); body.position.y = 0.35; this.pGroup.add(body);
+      const can = sbox(0.8, 0.25, 1.2, sc.primary, 0.4); can.position.set(0, 0.65, -0.2); this.pGroup.add(can);
+      const sp = sbox(1.4, 0.08, 0.3, sc.accent, 0.6); sp.position.set(0, 0.2, 1.2); this.pGroup.add(sp);
+      const rs = sbox(1.0, 0.15, 0.15, sc.accent, 0.5); rs.position.set(0, 0.6, -1.2); this.pGroup.add(rs);
+      for (const sx of [-0.4, 0.4]) { const gn = sbox(0.08, 0.08, 0.5, sc.accent, 0.8); gn.position.set(sx, 0.3, 1.4); this.pGroup.add(gn); }
+      for (const [wx, wz] of [[-0.65, 0.7], [0.65, 0.7], [-0.65, -0.7], [0.65, -0.7]]) { const w = new Mesh(new TorusGeometry(0.18, 0.06, 6, 8), new MeshBasicMaterial({ color: sc.accent, wireframe: true })); w.rotation.y = Math.PI / 2; w.position.set(wx, 0.18, wz); this.pGroup.add(w); }
+    }
     const gl = new Mesh(new SphereGeometry(0.2, 6, 6), new MeshBasicMaterial({ color: sc.accent, transparent: true, opacity: 0.4 })); gl.position.set(0, 0.3, -1.3); this.pGroup.add(gl);
     this.headlightL = new Mesh(new BoxGeometry(0.3, 0.05, 8), new MeshBasicMaterial({ color: sc.primary, transparent: true, opacity: 0.08 }));
     this.headlightL.position.set(-0.35, 0.35, 5.5); this.pGroup.add(this.headlightL);
@@ -498,6 +556,37 @@ export class GameSystem extends createSystem({
       const w2 = sbox(0.4, 0.08, 0.8, '#ff0088', 0.5); w2.position.set(0.6, 0.2, 0.3); g.add(w2);
       hp = 2;
     }
+    else if (type === 'gunship') {
+      // Helicopter Gunship boss — bigger than helicopter, dual gun pods, armored hull
+      const hull = sbox(1.4, 0.6, 3.0, '#cc0000', 0.7); hull.position.y = 4; g.add(hull);
+      const cockpit = sbox(0.8, 0.4, 1.0, '#880000', 0.6); cockpit.position.set(0, 4.2, 1.2); g.add(cockpit);
+      const rot = new Mesh(new CylinderGeometry(1.8, 1.8, 0.06, 4), new MeshBasicMaterial({ color: '#cc0000', wireframe: true, transparent: true, opacity: 0.5 })); rot.position.y = 4.8; g.add(rot);
+      const tail = sbox(0.25, 0.25, 2.5, '#cc0000', 0.5); tail.position.set(0, 4, -2.5); g.add(tail);
+      const tailRotor = new Mesh(new CylinderGeometry(0.5, 0.5, 0.04, 4), new MeshBasicMaterial({ color: '#cc0000', wireframe: true, transparent: true, opacity: 0.4 })); tailRotor.position.set(0.3, 4, -3.5); tailRotor.rotation.z = Math.PI / 2; g.add(tailRotor);
+      // Gun pods
+      const gunL = sbox(0.15, 0.15, 1.2, sc.enemy, 0.8); gunL.position.set(-0.8, 3.5, 1.5); g.add(gunL);
+      const gunR = sbox(0.15, 0.15, 1.2, sc.enemy, 0.8); gunR.position.set(0.8, 3.5, 1.5); g.add(gunR);
+      // Armor plating
+      const plateL = sbox(0.08, 0.5, 2.0, '#660000', 0.5); plateL.position.set(-0.75, 3.8, 0); g.add(plateL);
+      const plateR = sbox(0.08, 0.5, 2.0, '#660000', 0.5); plateR.position.set(0.75, 3.8, 0); g.add(plateR);
+      hp = 8 + Math.floor(this.wave / 8);
+    }
+    else if (type === 'tank') {
+      // Tank boss — huge, wide, slow, massive HP, turret with cannon
+      const chassis = sbox(2.2, 0.6, 4.0, '#444444', 0.7); chassis.position.y = 0.5; g.add(chassis);
+      const armor = sbox(2.0, 0.3, 3.6, '#555555', 0.5); armor.position.set(0, 0.9, 0); g.add(armor);
+      const turret = sbox(1.2, 0.4, 1.2, '#666666', 0.6); turret.position.set(0, 1.2, 0.2); g.add(turret);
+      const cannon = sbox(0.2, 0.2, 2.0, sc.enemy, 0.8); cannon.position.set(0, 1.3, 1.5); g.add(cannon);
+      // Treads
+      const treadL = sbox(0.3, 0.4, 4.0, '#333333', 0.6); treadL.position.set(-1.2, 0.3, 0); g.add(treadL);
+      const treadR = sbox(0.3, 0.4, 4.0, '#333333', 0.6); treadR.position.set(1.2, 0.3, 0); g.add(treadR);
+      // Warning lights
+      const warnL = new Mesh(new SphereGeometry(0.15, 6, 6), new MeshBasicMaterial({ color: '#ff4400', transparent: true, opacity: 0.6 })); warnL.position.set(-0.5, 1.5, 0.2); g.add(warnL);
+      const warnR = new Mesh(new SphereGeometry(0.15, 6, 6), new MeshBasicMaterial({ color: '#ff4400', transparent: true, opacity: 0.6 })); warnR.position.set(0.5, 1.5, 0.2); g.add(warnR);
+      // Reactive armor blocks
+      for (let i = 0; i < 3; i++) { const blk = sbox(0.4, 0.2, 0.4, '#777777', 0.4); blk.position.set(rf(-0.8, 0.8), 1.0, -1 + i * 1); g.add(blk); }
+      hp = 12 + Math.floor(this.wave / 6);
+    }
     else { // armored
       const b = sbox(1.6, 0.5, 3.2, sc.enemy, 0.7); b.position.y = 0.4; g.add(b);
       const tu = sbox(0.8, 0.3, 0.8, sc.enemy, 0.6); tu.position.set(0, 0.75, 0.3); g.add(tu);
@@ -511,11 +600,13 @@ export class GameSystem extends createSystem({
     let spd: number;
     if (type === 'motorcycle') spd = SCROLL_SPD * 0.7;
     else if (type === 'helicopter') spd = SCROLL_SPD * 0.5;
+    else if (type === 'gunship') spd = SCROLL_SPD * 0.4;
     else if (type === 'armored') spd = SCROLL_SPD * 0.3;
+    else if (type === 'tank') spd = SCROLL_SPD * 0.2;
     else if (type === 'van') spd = SCROLL_SPD * 0.55;
     else if (type === 'interceptor') spd = SCROLL_SPD * 0.85;
     else spd = SCROLL_SPD * 0.6;
-    return { mesh: g, x: laneX(lane), z, speed: spd, type, hp, fireTimer: rf(0.5, 2), dead: false, targetLane: lane, laneChangeT: rf(2, 5), deathSpin: 0, dying: false, mineCD: type === 'van' ? rf(2, 4) : 999 };
+    return { mesh: g, x: laneX(lane), z, speed: spd, type, hp, fireTimer: rf(0.5, 2), dead: false, targetLane: lane, laneChangeT: rf(2, 5), deathSpin: 0, dying: false, mineCD: type === 'van' ? rf(2, 4) : 999, bossPattern: 0 };
   }
 
   private mkCiv(lane: number, z: number): CivilianCar {
@@ -784,6 +875,71 @@ export class GameSystem extends createSystem({
     return { mesh: m, z, dead: false, mult: 2 };
   }
 
+  private mkOverpass(z: number): OverpassObj {
+    const sc = SCHEMES[this.cIdx]; const g = new Group();
+    // Support pillars
+    const pilL = new Mesh(new CylinderGeometry(0.3, 0.3, 7, 6), new MeshBasicMaterial({ color: sc.accent, wireframe: true, transparent: true, opacity: 0.2 }));
+    pilL.position.set(-ROAD_WIDTH / 2 - 2, 3.5, 0); g.add(pilL);
+    const pilR = new Mesh(new CylinderGeometry(0.3, 0.3, 7, 6), new MeshBasicMaterial({ color: sc.accent, wireframe: true, transparent: true, opacity: 0.2 }));
+    pilR.position.set(ROAD_WIDTH / 2 + 2, 3.5, 0); g.add(pilR);
+    // Overpass deck
+    const deck = sbox(ROAD_WIDTH + 8, 0.3, 3.0, sc.primary, 0.1);
+    deck.position.set(0, 7, 0); g.add(deck);
+    // Railings
+    const railL = sbox(ROAD_WIDTH + 8, 0.6, 0.08, sc.accent, 0.15);
+    railL.position.set(0, 7.4, -1.4); g.add(railL);
+    const railR = sbox(ROAD_WIDTH + 8, 0.6, 0.08, sc.accent, 0.15);
+    railR.position.set(0, 7.4, 1.4); g.add(railR);
+    // Neon strip along underside
+    const neon = sbox(ROAD_WIDTH + 4, 0.06, 0.06, sc.accent, 0.5);
+    neon.position.set(0, 6.8, 0); g.add(neon);
+    // Traffic lights on the overpass (decorative)
+    for (let i = 0; i < 3; i++) {
+      const light = new Mesh(new SphereGeometry(0.12, 6, 6), new MeshBasicMaterial({ color: i === 0 ? '#ff0000' : i === 1 ? '#ffcc00' : '#00ff00', transparent: true, opacity: 0.5 }));
+      light.position.set(-4 + i * 4, 7.5, 0); g.add(light);
+    }
+    g.position.set(0, 0, z); this._scene.add(g);
+    return { mesh: g, z };
+  }
+
+  private mkHighwaySign(z: number, side: number): HighwaySign {
+    const sc = SCHEMES[this.cIdx]; const g = new Group();
+    const x = side * (ROAD_WIDTH / 2 + rf(3, 5));
+    // Sign post
+    const post = new Mesh(new CylinderGeometry(0.08, 0.08, 6, 4), new MeshBasicMaterial({ color: '#888888', transparent: true, opacity: 0.4 }));
+    post.position.y = 3; g.add(post);
+    // Sign board — neon-bordered rectangle
+    const signTypes = ri(0, 2);
+    const signW = rf(2.0, 3.5); const signH = rf(1.0, 1.8);
+    const board = sbox(signW, signH, 0.08, '#003322', 0.6);
+    board.position.set(0, 5.5, 0); g.add(board);
+    // Neon border
+    const borderT = sbox(signW + 0.1, 0.08, 0.1, sc.accent, 0.7); borderT.position.set(0, 5.5 + signH / 2, 0.05); g.add(borderT);
+    const borderB = sbox(signW + 0.1, 0.08, 0.1, sc.accent, 0.7); borderB.position.set(0, 5.5 - signH / 2, 0.05); g.add(borderB);
+    const borderL = sbox(0.08, signH, 0.1, sc.accent, 0.7); borderL.position.set(-signW / 2, 5.5, 0.05); g.add(borderL);
+    const borderR = sbox(0.08, signH, 0.1, sc.accent, 0.7); borderR.position.set(signW / 2, 5.5, 0.05); g.add(borderR);
+    // Neon text lines (decorative bars)
+    const textColor = signTypes === 0 ? sc.primary : signTypes === 1 ? '#ff00ff' : '#ffcc00';
+    for (let i = 0; i < 2; i++) {
+      const line = sbox(signW * rf(0.4, 0.7), 0.12, 0.05, textColor, 0.6);
+      line.position.set(rf(-0.3, 0.3), 5.5 + (i === 0 ? 0.3 : -0.3), 0.06); g.add(line);
+    }
+    // Light on top
+    const light = new Mesh(new SphereGeometry(0.1, 6, 6), new MeshBasicMaterial({ color: sc.accent, transparent: true, opacity: 0.6 }));
+    light.position.set(0, 5.5 + signH / 2 + 0.3, 0); g.add(light);
+    g.position.set(x, 0, z); this._scene.add(g);
+    return { mesh: g, z, side };
+  }
+
+  private spawnOilTrail() {
+    if (this.oilTrailCD > 0) return;
+    const m = new Mesh(new BoxGeometry(0.6, 0.03, 1.5), new MeshBasicMaterial({ color: '#334400', transparent: true, opacity: 0.45 }));
+    m.position.set(this.pX, 0.02, PLAYER_Z - 2); this.entG.add(m);
+    this.oilTrails.push({ mesh: m, x: this.pX, z: PLAYER_Z - 2, timer: 6, dead: false });
+    this.oilTrailCD = 0.3;
+    sfxOilTrail();
+  }
+
   private fireNitro() {
     if (this.nitroCharges <= 0 || this.nitroActive) return;
     this.nitroActive = true; this.nitroTimer = 3;
@@ -947,6 +1103,10 @@ export class GameSystem extends createSystem({
     this.killTypesThisGame.add(type);
     if (type === 'van') { this.sVanKills++; this.career.totalVanKills++; this.unlock('van-kill'); if (this.sVanKills >= 5) this.unlock('van-kill-5'); }
     if (type === 'interceptor') { this.sInterceptorKills++; this.career.totalInterceptorKills++; this.unlock('interceptor-kill'); if (this.sInterceptorKills >= 5) this.unlock('interceptor-5'); }
+    if (type === 'gunship') { this.sGunshipKills++; this.bossTypesThisGame.add('gunship'); this.career.totalBoss++; this.unlock('gunship-kill'); }
+    if (type === 'tank') { this.sTankKills++; this.bossTypesThisGame.add('tank'); this.career.totalBoss++; this.unlock('tank-kill'); try { const tc = parseInt(localStorage.getItem('neon-spy-tankKills') || '0') + 1; localStorage.setItem('neon-spy-tankKills', String(tc)); if (tc >= 3) this.unlock('tank-kills-3'); } catch {} }
+    if (type === 'armored') { this.bossTypesThisGame.add('armored'); }
+    if (this.bossTypesThisGame.has('armored') && this.bossTypesThisGame.has('gunship') && this.bossTypesThisGame.has('tank')) this.unlock('all-bosses');
     if (this.killTypesThisGame.size >= 6) this.unlock('all-enemy-types');
     if (this.weaponLvl >= 2) { this.sLaserKills++; if (this.sLaserKills >= 20) this.unlock('laser-kills-20'); }
     // Heat increase
@@ -1021,7 +1181,15 @@ export class GameSystem extends createSystem({
 
   private wirePause() { if (!this.pauseDoc) return; (this.pauseDoc.getElementById('btn-resume') as UIKit.Text|undefined)?.addEventListener('click', () => this.resumeG()); (this.pauseDoc.getElementById('btn-quit') as UIKit.Text|undefined)?.addEventListener('click', () => this.quitMenu()); }
   private wireRes() { if (!this.resDoc) return; (this.resDoc.getElementById('btn-retry') as UIKit.Text|undefined)?.addEventListener('click', () => this.startG()); (this.resDoc.getElementById('btn-menu') as UIKit.Text|undefined)?.addEventListener('click', () => this.quitMenu()); }
-  private wireSet() { if (!this.setDoc) return; (this.setDoc.getElementById('btn-color-next') as UIKit.Text|undefined)?.addEventListener('click', () => { this.cIdx = (this.cIdx + 1) % SCHEMES.length; this.applyCS(); }); (this.setDoc.getElementById('btn-color-prev') as UIKit.Text|undefined)?.addEventListener('click', () => { this.cIdx = (this.cIdx - 1 + SCHEMES.length) % SCHEMES.length; this.applyCS(); }); (this.setDoc.getElementById('btn-settings-back') as UIKit.Text|undefined)?.addEventListener('click', () => this.showP('menu')); this.applyCS(); }
+  private wireSet() {
+    if (!this.setDoc) return;
+    (this.setDoc.getElementById('btn-color-next') as UIKit.Text|undefined)?.addEventListener('click', () => { this.cIdx = (this.cIdx + 1) % SCHEMES.length; this.applyCS(); });
+    (this.setDoc.getElementById('btn-color-prev') as UIKit.Text|undefined)?.addEventListener('click', () => { this.cIdx = (this.cIdx - 1 + SCHEMES.length) % SCHEMES.length; this.applyCS(); });
+    (this.setDoc.getElementById('btn-car-next') as UIKit.Text|undefined)?.addEventListener('click', () => { this.cycleCarStyle(1); });
+    (this.setDoc.getElementById('btn-car-prev') as UIKit.Text|undefined)?.addEventListener('click', () => { this.cycleCarStyle(-1); });
+    (this.setDoc.getElementById('btn-settings-back') as UIKit.Text|undefined)?.addEventListener('click', () => this.showP('menu'));
+    this.applyCS(); this.updCarStyleDisplay();
+  }
   private wireAch() { if (!this.achDoc) return; (this.achDoc.getElementById('btn-ach-back') as UIKit.Text|undefined)?.addEventListener('click', () => this.showP('menu')); (this.achDoc.getElementById('btn-ach-next') as UIKit.Text|undefined)?.addEventListener('click', () => { this.achPg++; this.updAchDisp(); }); (this.achDoc.getElementById('btn-ach-prev') as UIKit.Text|undefined)?.addEventListener('click', () => { this.achPg = Math.max(0, this.achPg - 1); this.updAchDisp(); }); this.updAchDisp(); }
   private wireStat() { if (!this.statDoc) return; (this.statDoc.getElementById('btn-stats-back') as UIKit.Text|undefined)?.addEventListener('click', () => this.showP('menu')); this.updStats(); }
   private wireTut() { if (!this.tutDoc) return; (this.tutDoc.getElementById('btn-tutorial-back') as UIKit.Text|undefined)?.addEventListener('click', () => this.showP('menu')); }
@@ -1036,6 +1204,32 @@ export class GameSystem extends createSystem({
   }
 
   private applyCS() { const sc = SCHEMES[this.cIdx]; this._scene.background = new Color(sc.bg); const f = this._scene.fog as FogExp2; if (f) f.color = new Color(sc.bg); this.st(this.setDoc, 'color-name', sc.name); this.saveData(); }
+
+  private cycleCarStyle(dir: number) {
+    // Find next unlocked car style in direction
+    let newStyle = this.carStyle;
+    for (let i = 0; i < 4; i++) {
+      newStyle = (newStyle + dir + 4) % 4;
+      if (this.unlockedCars.includes(newStyle)) break;
+    }
+    if (newStyle !== this.carStyle && this.unlockedCars.includes(newStyle)) {
+      this.carStyle = newStyle;
+      sfxCarSwitch();
+      this.saveCarData();
+      // Rebuild player car
+      this.entG.remove(this.pGroup);
+      this.buildPlayer();
+      this.pGroup.position.set(this.pX, 0, PLAYER_Z);
+      this.updCarStyleDisplay();
+    }
+  }
+
+  private updCarStyleDisplay() {
+    const names = ['Default', 'Sleek', 'Muscle', 'Stealth'];
+    const locked = !this.unlockedCars.includes(this.carStyle);
+    this.st(this.setDoc, 'car-name', names[this.carStyle] + (locked ? ' [LOCKED]' : ''));
+    this.st(this.setDoc, 'car-info', `${this.unlockedCars.length}/4 unlocked`);
+  }
 
   private updAchDisp() {
     if (!this.achDoc) return; const pp = 6; const mx = Math.floor((this.achs.length - 1) / pp); this.achPg = clp(this.achPg, 0, mx); const s = this.achPg * pp;
@@ -1102,6 +1296,12 @@ export class GameSystem extends createSystem({
     this.speedZones = []; this.speedZoneCD = 30; this.inSpeedZone = false; this.speedZoneMult = 1; this.sZoneScore = 0; this.sZonesEntered = 0;
     this.nitroCharges = 3; this.nitroActive = false; this.nitroTimer = 0; this.sNitrosUsed = 0;
     this.sBarrelsExploded = 0; this.sBarrelKills = 0;
+    // R8 resets
+    this.oilTrails = []; this.oilTrailCD = 0; this.sOilTrailKills = 0;
+    this.overpasses = []; this.overpassCD = 25; this.sOverpasses = 0;
+    this.highwaySigns = []; this.signCD = 8;
+    this.sGunshipKills = 0; this.sTankKills = 0;
+    this.bossTypesThisGame.clear();
 
     this.modesPlayed.add(this.mode);
     try { const mp = localStorage.getItem('neon-spy-modes'); if (mp) JSON.parse(mp).forEach((m: string) => this.modesPlayed.add(m)); } catch {}
@@ -1128,10 +1328,14 @@ export class GameSystem extends createSystem({
     for (const rd of this.rainDrops) this._scene.remove(rd.mesh);
     for (const br of this.barrels) this.entG.remove(br.mesh);
     for (const sz of this.speedZones) this._scene.remove(sz.mesh);
+    for (const ot of this.oilTrails) this.entG.remove(ot.mesh);
+    for (const op of this.overpasses) this._scene.remove(op.mesh);
+    for (const hs of this.highwaySigns) this._scene.remove(hs.mesh);
     this.enemies = []; this.civs = []; this.bullets = []; this.pups = []; this.oils = []; this.parts = [];
     this.smokes = []; this.hazards = []; this.popups = []; this.trails = []; this.mines = []; this.roadObjs = [];
     this.decoys = []; this.empWaves = []; this.jumpRamps = []; this.rainDrops = []; this.isRaining = false;
     this.barrels = []; this.speedZones = []; this.inSpeedZone = false;
+    this.oilTrails = []; this.overpasses = []; this.highwaySigns = [];
   }
 
   private pauseG() { this.gState = 'paused'; this.showP('pause'); }
@@ -1161,11 +1365,12 @@ export class GameSystem extends createSystem({
     if (this.career.perfectWaves >= 10) this.unlock('perfect-10');
     if (this.wave >= 5 && this.sCivHits === 0) this.unlock('clean-op');
     if (this.wave >= 5 && this.weaponLvl === 0) this.unlock('no-weapon-wave5');
-    if (this.wave >= 75) this.unlock('wave-75'); if (this.wave >= 100) this.unlock('wave-100');
+    if (this.wave >= 75) this.unlock('wave-75'); if (this.wave >= 100) this.unlock('wave-100'); if (this.wave >= 150) this.unlock('wave-150');
     this.career.totalRainDist += this.sRainDist;
     if (this.career.totalRainDist >= 5000) this.unlock('total-rain-5k');
     this.addToLeaderboard(this.score, this.wave);
     if (this.sZoneScore >= 10000) this.unlock('zone-10k');
+    if (this.score >= 5000000) this.unlock('score-5m');
     this.st(this.resDoc, 'result-score', `Score: ${this.score}`); this.st(this.resDoc, 'result-wave', `Wave: ${this.wave}`);
     this.st(this.resDoc, 'result-distance', `Distance: ${Math.floor(this.dist)}m`); this.st(this.resDoc, 'result-combo', `Max Combo: ${this.maxCombo}x`);
     this.st(this.resDoc, 'result-kills', `Kills: ${this.sKills}`);
@@ -1218,7 +1423,14 @@ export class GameSystem extends createSystem({
       if (this.waveNoDmg) { this.sPerfectWaves++; this.consecutivePerfect++; this.unlock('perfect-wave'); if (this.sPerfectWaves >= 3) this.unlock('perfect-3'); if (this.consecutivePerfect >= 5) this.unlock('consecutive-perfect-5'); } else { this.consecutivePerfect = 0; }
       this.waveNoDmg = true;
       this.wave++; this.scrollSpd = SCROLL_SPD + this.wave * 0.8; sfxWave();
-      if (this.wave % 5 === 0 && !this.bossOut) { this.bossOut = true; this.enemies.push(this.mkEnemy('armored', ri(1, 3), PLAYER_Z + 80)); sfxBoss(); } else { this.bossOut = false; }
+      if (this.wave % 10 === 0 && !this.bossOut) {
+        // Tank boss every 10 waves
+        this.bossOut = true; this.enemies.push(this.mkEnemy('tank', 2, PLAYER_Z + 80)); sfxTankBoss();
+      } else if (this.wave % 5 === 0 && !this.bossOut) {
+        // Alternate between armored and gunship every 5 waves
+        const bossType: EnemyCar['type'] = (Math.floor(this.wave / 5) % 2 === 0) ? 'armored' : 'gunship';
+        this.bossOut = true; this.enemies.push(this.mkEnemy(bossType, ri(1, 3), PLAYER_Z + 80)); sfxBoss();
+      } else { this.bossOut = false; }
     }
     // Mission system
     if (this.missionCD > 0) this.missionCD -= dt;
@@ -1457,8 +1669,27 @@ export class GameSystem extends createSystem({
     }
     // Nitro recharge every 8 waves
     if (this.wave % 8 === 0 && this.waveT < dt * 2 && this.nitroCharges < 3) { this.nitroCharges = Math.min(3, this.nitroCharges + 1); }
+    // Oil trail mechanic — leave damaging trail when speed boosted
+    if (this.spdBoost || this.nitroActive) { this.spawnOilTrail(); }
+    // Overpass spawning
+    this.overpassCD -= dt;
+    if (this.overpassCD <= 0 && this.wave >= 3) {
+      this.overpasses.push(this.mkOverpass(PLAYER_Z + 90));
+      this.overpassCD = rf(25, 45);
+    }
+    // Highway sign spawning
+    this.signCD -= dt;
+    if (this.signCD <= 0) {
+      const signSide = Math.random() < 0.5 ? -1 : 1;
+      this.highwaySigns.push(this.mkHighwaySign(PLAYER_Z + 85 + rf(0, 15), signSide));
+      this.signCD = rf(6, 12);
+    }
+    // Car unlock checks
+    if (this.wave >= 20 && !this.unlockedCars.includes(1)) { this.unlockedCars.push(1); this.saveCarData(); this.unlock('car-sleek'); }
+    if (this.career.totalKills >= 100 && !this.unlockedCars.includes(2)) { this.unlockedCars.push(2); this.saveCarData(); this.unlock('car-muscle'); }
+    if (this.career.totalMissions >= 10 && !this.unlockedCars.includes(3)) { this.unlockedCars.push(3); this.saveCarData(); this.unlock('car-stealth'); }
     // Update all entities
-    this.updEnemies(dt, spd, time); this.updCivs(dt, spd); this.updBullets(dt); this.updPUs(dt, spd); this.updOils(dt, spd); this.updSmokes(dt, spd); this.updParts(dt); this.updPopups(dt); this.updTrails(dt); this.updHazards(dt, spd); this.updMines(dt, spd); this.updRoadObjs(dt, spd); this.updDecoys(dt, spd, time); this.updEMPWaves(dt); this.updRamps(dt, spd); this.updBarrels(dt, spd); this.updSpeedZones(dt, spd); this.checkColl(time);
+    this.updEnemies(dt, spd, time); this.updCivs(dt, spd); this.updBullets(dt); this.updPUs(dt, spd); this.updOils(dt, spd); this.updSmokes(dt, spd); this.updParts(dt); this.updPopups(dt); this.updTrails(dt); this.updHazards(dt, spd); this.updMines(dt, spd); this.updRoadObjs(dt, spd); this.updDecoys(dt, spd, time); this.updEMPWaves(dt); this.updRamps(dt, spd); this.updBarrels(dt, spd); this.updSpeedZones(dt, spd); this.updOilTrails(dt, spd); this.updOverpasses(dt, spd); this.updHighwaySigns(dt, spd, time); this.checkColl(time);
     this.updHUD(); this.updRadar();
     this.pGroup.position.x = this.pX;
     // Headlight flicker (handled in night mode section above for night, basic here for day)
@@ -1514,6 +1745,19 @@ export class GameSystem extends createSystem({
       if (Math.abs(e.x - tlx) > 0.1) { e.x += (tlx > e.x ? 1 : -1) * laneSpd * dt; e.mesh.position.x = e.x; }
       // Helicopter rotor
       if (e.type === 'helicopter' && e.mesh.children[1]) e.mesh.children[1].rotation.y += dt * 10;
+      // Gunship rotor + gun pod behavior
+      if (e.type === 'gunship') {
+        if (e.mesh.children[2]) e.mesh.children[2].rotation.y += dt * 12; // Main rotor
+        if (e.mesh.children[4]) e.mesh.children[4].rotation.z += dt * 8; // Tail rotor
+        // Gunship fires in burst patterns
+        e.bossPattern += dt;
+      }
+      // Tank turret tracking
+      if (e.type === 'tank' && e.mesh.children[2]) {
+        // Slowly rotate turret toward player
+        const targetAngle = Math.atan2(this.pX - e.x, 1);
+        e.mesh.children[2].rotation.y += (targetAngle - e.mesh.children[2].rotation.y) * dt * 2;
+      }
       // Van mine dropping
       if (e.type === 'van') {
         e.mineCD -= dt;
@@ -1530,10 +1774,32 @@ export class GameSystem extends createSystem({
       if (e.type !== 'motorcycle' && !inSmoke) {
         e.fireTimer -= dt;
         if (e.fireTimer <= 0 && e.z > PLAYER_Z && e.z < PLAYER_Z + 50) {
-          this.fireBullet(e.x, e.z - 1.5, false);
-          sfxEnemyShoot();
-          const rateScale = e.type === 'interceptor' ? 0.7 : 1;
-          e.fireTimer = ENEMY_FIRE_RATE * rateScale / (1 + this.wave * 0.1);
+          if (e.type === 'gunship') {
+            // Gunship fires burst of 3 bullets in a spread pattern
+            sfxGunshipFire();
+            this.fireBullet(e.x - 0.8, e.z - 1.5, false, -3);
+            this.fireBullet(e.x, e.z - 1.5, false);
+            this.fireBullet(e.x + 0.8, e.z - 1.5, false, 3);
+            // Alternate with strafing runs
+            if (Math.floor(e.bossPattern / 3) % 2 === 1) {
+              this.fireBullet(e.x - 1.5, e.z - 2, false, -5);
+              this.fireBullet(e.x + 1.5, e.z - 2, false, 5);
+            }
+            e.fireTimer = 1.2 / (1 + this.wave * 0.05);
+          } else if (e.type === 'tank') {
+            // Tank fires a single powerful explosive shell (3 bullets tight cluster)
+            sfxTankFire();
+            this.fireBullet(e.x - 0.2, e.z + 1.5, false);
+            this.fireBullet(e.x, e.z + 1.5, false);
+            this.fireBullet(e.x + 0.2, e.z + 1.5, false);
+            this.triggerShake(0.05, 0.1);
+            e.fireTimer = 2.5 / (1 + this.wave * 0.03);
+          } else {
+            this.fireBullet(e.x, e.z - 1.5, false);
+            sfxEnemyShoot();
+            const rateScale = e.type === 'interceptor' ? 0.7 : 1;
+            e.fireTimer = ENEMY_FIRE_RATE * rateScale / (1 + this.wave * 0.1);
+          }
         }
       }
       if (e.z < PLAYER_Z - 20) { e.dead = true; }
@@ -1673,6 +1939,66 @@ export class GameSystem extends createSystem({
     }
     this.speedZones = this.speedZones.filter(sz => { if (sz.dead) { this._scene.remove(sz.mesh); return false; } return true; });
   }
+  private updOilTrails(dt: number, ss: number) {
+    for (const ot of this.oilTrails) {
+      if (ot.dead) continue;
+      ot.z -= ss * dt; ot.mesh.position.z = ot.z; ot.timer -= dt;
+      (ot.mesh.material as MeshBasicMaterial).opacity = Math.max(0, 0.45 * (ot.timer / 6));
+      if (ot.timer <= 0 || ot.z < PLAYER_Z - 30) ot.dead = true;
+      // Damage enemies on contact
+      for (const e of this.enemies) {
+        if (e.dead || e.dying) continue;
+        if (Math.abs(ot.x - e.x) < 0.8 && Math.abs(ot.z - e.z) < 1.5) {
+          ot.dead = true;
+          e.hp -= 2;
+          this.spawnParts(e.x, 0.3, e.z, '#334400', 8);
+          sfxHit();
+          if (e.hp <= 0) {
+            e.dying = true; e.deathSpin = 0;
+            const gained = 200 * this.combo;
+            this.score += gained; this.addPopup(e.x, e.z, gained);
+            sfxExplosion(); this.sKills++; this.career.totalKills++;
+            this.sOilTrailKills++;
+            this.onEnemyKill(e.type, true);
+            this.unlock('oil-trail-kill');
+            if (this.sOilTrailKills >= 5) this.unlock('oil-trail-5');
+          }
+          break;
+        }
+      }
+    }
+    this.oilTrails = this.oilTrails.filter(ot => { if (ot.dead) { this.entG.remove(ot.mesh); return false; } return true; });
+    if (this.oilTrailCD > 0) this.oilTrailCD -= dt;
+  }
+  private updOverpasses(dt: number, ss: number) {
+    for (const op of this.overpasses) {
+      op.z -= ss * dt; op.mesh.position.z = op.z;
+      // Track passing under
+      if (op.z < PLAYER_Z - 2 && op.z > PLAYER_Z - 4) {
+        this.sOverpasses++;
+        if (this.sOverpasses >= 10) this.unlock('overpass-10');
+      }
+    }
+    this.overpasses = this.overpasses.filter(op => { if (op.z < PLAYER_Z - 40) { this._scene.remove(op.mesh); return false; } return true; });
+  }
+  private updHighwaySigns(dt: number, ss: number, time: number) {
+    for (const hs of this.highwaySigns) {
+      hs.z -= ss * dt; hs.mesh.position.z = hs.z;
+      // Neon border flicker
+      for (let i = 2; i <= 5; i++) {
+        const border = hs.mesh.children[i];
+        if (border && (border as Mesh).material) {
+          (border as Mesh).material = new MeshBasicMaterial({ color: SCHEMES[this.cIdx].accent, transparent: true, opacity: 0.5 + Math.sin(time * 5 + hs.z * 2 + i) * 0.2 });
+        }
+      }
+      // Top light blink
+      const topLight = hs.mesh.children[hs.mesh.children.length - 1];
+      if (topLight && (topLight as Mesh).material) {
+        (topLight as Mesh).material = new MeshBasicMaterial({ color: SCHEMES[this.cIdx].accent, transparent: true, opacity: Math.sin(time * 3 + hs.z) > 0 ? 0.7 : 0.2 });
+      }
+    }
+    this.highwaySigns = this.highwaySigns.filter(hs => { if (hs.z < PLAYER_Z - 40) { this._scene.remove(hs.mesh); return false; } return true; });
+  }
   private updParts(dt: number) { for (const p of this.parts) { p.vel.y -= 9.8 * dt; p.mesh.position.add(p.vel.clone().multiplyScalar(dt)); p.life -= dt; (p.mesh.material as MeshBasicMaterial).opacity = Math.max(0, p.life / p.maxLife); } this.parts = this.parts.filter(p => { if (p.life <= 0) { this._scene.remove(p.mesh); return false; } return true; }); }
   private updPopups(dt: number) { for (const p of this.popups) { p.y += dt * 2; p.mesh.position.y = p.y; p.life -= dt; (p.mesh.material as MeshBasicMaterial).opacity = Math.max(0, p.life); } this.popups = this.popups.filter(p => { if (p.life <= 0) { this._scene.remove(p.mesh); return false; } return true; }); }
   private updTrails(dt: number) { for (const t of this.trails) { t.life -= dt; (t.mesh.material as MeshBasicMaterial).opacity = Math.max(0, t.life * 0.8); } this.trails = this.trails.filter(t => { if (t.life <= 0) { this._scene.remove(t.mesh); return false; } return true; }); }
@@ -1681,7 +2007,7 @@ export class GameSystem extends createSystem({
   private checkColl(time: number) {
     const px = this.pX, pz = PLAYER_Z;
     // Player bullets vs enemies
-    for (const b of this.bullets) { if (b.dead || !b.fromPlayer) continue; for (const e of this.enemies) { if (e.dead || e.dying) continue; const hw = e.type === 'armored' ? 1.8 : e.type === 'van' ? 1.4 : e.type === 'helicopter' ? 1.0 : e.type === 'interceptor' ? 0.8 : 0.7; const hd = e.type === 'armored' ? 3.5 : e.type === 'van' ? 2.8 : 2.2; if (Math.abs(b.x - e.x) < hw && Math.abs(b.z - e.z) < hd) { b.dead = true; e.hp--; sfxHit(); if (e.hp <= 0) { e.dying = true; e.deathSpin = 0; let pts: number; if (e.type === 'armored') pts = 1000; else if (e.type === 'helicopter') pts = 300; else if (e.type === 'motorcycle') pts = 150; else if (e.type === 'van') pts = 250; else if (e.type === 'interceptor') pts = 350; else pts = 100; const scoreMult = this.inSpeedZone ? this.speedZoneMult : 1; const gained = pts * this.combo * scoreMult; this.score += gained; if (this.inSpeedZone) this.sZoneScore += gained; this.addPopup(e.x, e.z, gained); this.spawnParts(e.x, 0.5, e.z, SCHEMES[this.cIdx].enemy, e.type === 'armored' ? 25 : 15); sfxExplosion(); if (e.type === 'armored') this.triggerShake(0.15, 0.3); this.sKills++; this.career.totalKills++; this.onEnemyKill(e.type, false); if (this.isAirborne) this.unlock('jump-kill'); if (this.nitroActive) this.unlock('nitro-kill'); this.recentKillTimes.push(time); this.recentKillTimes = this.recentKillTimes.filter(t => time - t < 1); if (this.recentKillTimes.length >= 3) this.unlock('multi-kill-3'); this.combo = Math.min(8, this.combo + 1); this.comboT = COMBO_DECAY; if (this.combo > this.maxCombo) this.maxCombo = this.combo; if (this.combo >= 3) { this.unlock('combo-3'); sfxCombo(); } if (this.combo >= 5) this.unlock('combo-5'); if (this.combo >= 8) this.unlock('combo-8'); this.unlock('first-kill'); if (this.sKills >= 10) this.unlock('kills-10'); if (this.sKills >= 25) this.unlock('kills-25'); if (this.sKills >= 50) this.unlock('kills-50'); if (this.sKills >= 100) this.unlock('kills-100'); if (this.sKills >= 200) this.unlock('kills-200'); if (this.sKills >= 300) this.unlock('kills-300'); if (this.sKills >= 500) this.unlock('kills-500'); if (e.type === 'armored') { this.career.totalBoss++; this.unlock('boss-kill'); if (this.career.totalBoss >= 5) this.unlock('boss-5'); if (this.isRaining) this.unlock('rain-boss'); } if (this.spdBoost) this.unlock('speed-kill'); if (this.isRaining) { this.rainKills++; if (this.rainKills >= 10) this.unlock('rain-kill-10'); } for (const sm of this.smokes) { if (!sm.dead && Math.abs(e.x - sm.x) < 2 && Math.abs(e.z - sm.z) < 3) { this.unlock('smoke-kill'); break; } } } else { this.spawnParts(b.x, 0.5, b.z, '#ffffff', 4); } break; } } }
+    for (const b of this.bullets) { if (b.dead || !b.fromPlayer) continue; for (const e of this.enemies) { if (e.dead || e.dying) continue; const hw = e.type === 'armored' ? 1.8 : e.type === 'tank' ? 2.4 : e.type === 'van' ? 1.4 : e.type === 'helicopter' ? 1.0 : e.type === 'gunship' ? 1.6 : e.type === 'interceptor' ? 0.8 : 0.7; const hd = e.type === 'armored' ? 3.5 : e.type === 'tank' ? 4.5 : e.type === 'van' ? 2.8 : e.type === 'gunship' ? 3.5 : 2.2; if (Math.abs(b.x - e.x) < hw && Math.abs(b.z - e.z) < hd) { b.dead = true; e.hp--; sfxHit(); if (e.hp <= 0) { e.dying = true; e.deathSpin = 0; let pts: number; if (e.type === 'tank') pts = 2000; else if (e.type === 'gunship') pts = 1500; else if (e.type === 'armored') pts = 1000; else if (e.type === 'helicopter') pts = 300; else if (e.type === 'motorcycle') pts = 150; else if (e.type === 'van') pts = 250; else if (e.type === 'interceptor') pts = 350; else pts = 100; const scoreMult = this.inSpeedZone ? this.speedZoneMult : 1; const gained = pts * this.combo * scoreMult; this.score += gained; if (this.inSpeedZone) this.sZoneScore += gained; this.addPopup(e.x, e.z, gained); this.spawnParts(e.x, 0.5, e.z, SCHEMES[this.cIdx].enemy, e.type === 'armored' || e.type === 'tank' || e.type === 'gunship' ? 30 : 15); sfxExplosion(); if (e.type === 'armored' || e.type === 'tank' || e.type === 'gunship') this.triggerShake(0.15, 0.3); this.sKills++; this.career.totalKills++; this.onEnemyKill(e.type, false); if (this.isAirborne) this.unlock('jump-kill'); if (this.nitroActive) this.unlock('nitro-kill'); this.recentKillTimes.push(time); this.recentKillTimes = this.recentKillTimes.filter(t => time - t < 1); if (this.recentKillTimes.length >= 3) this.unlock('multi-kill-3'); this.combo = Math.min(8, this.combo + 1); this.comboT = COMBO_DECAY; if (this.combo > this.maxCombo) this.maxCombo = this.combo; if (this.combo >= 3) { this.unlock('combo-3'); sfxCombo(); } if (this.combo >= 5) this.unlock('combo-5'); if (this.combo >= 8) this.unlock('combo-8'); this.unlock('first-kill'); if (this.sKills >= 10) this.unlock('kills-10'); if (this.sKills >= 25) this.unlock('kills-25'); if (this.sKills >= 50) this.unlock('kills-50'); if (this.sKills >= 100) this.unlock('kills-100'); if (this.sKills >= 200) this.unlock('kills-200'); if (this.sKills >= 300) this.unlock('kills-300'); if (this.sKills >= 500) this.unlock('kills-500'); if (e.type === 'armored') { this.career.totalBoss++; this.unlock('boss-kill'); if (this.career.totalBoss >= 5) this.unlock('boss-5'); if (this.isRaining) this.unlock('rain-boss'); } if (e.type === 'gunship' || e.type === 'tank') { if (this.career.totalBoss >= 5) this.unlock('boss-5'); if (this.isRaining) this.unlock('rain-boss'); if (this.isNight) this.unlock('night-boss'); } if (this.spdBoost) this.unlock('speed-kill'); if (this.isRaining) { this.rainKills++; if (this.rainKills >= 10) this.unlock('rain-kill-10'); } for (const sm of this.smokes) { if (!sm.dead && Math.abs(e.x - sm.x) < 2 && Math.abs(e.z - sm.z) < 3) { this.unlock('smoke-kill'); break; } } } else { this.spawnParts(b.x, 0.5, b.z, '#ffffff', 4); } break; } } }
     // Player bullets vs barrels
     for (const b of this.bullets) { if (b.dead || !b.fromPlayer) continue; for (const br of this.barrels) { if (br.dead) continue; if (Math.abs(b.x - br.x) < 0.8 && Math.abs(b.z - br.z) < 1.2) { b.dead = true; this.explodeBarrel(br, 0); break; } } }
     // Skip body collisions when airborne
@@ -1689,7 +2015,7 @@ export class GameSystem extends createSystem({
     // Enemy bullets vs player
     if (this.invT <= 0) { for (const b of this.bullets) { if (b.dead || b.fromPlayer) continue; if (Math.abs(b.x - px) < 0.8 && Math.abs(b.z - pz) < 1.5) { b.dead = true; if (this.pShield) { this.pShield = false; (this.shieldM.material as MeshBasicMaterial).opacity = 0; sfxShield(); this.spawnParts(px, 0.5, pz, SCHEMES[this.cIdx].powerup, 10); } else { this.pHit(); } } } }
     // Enemy body vs player
-    if (this.invT <= 0) { for (const e of this.enemies) { if (e.dead || e.dying) continue; const hw = e.type === 'armored' ? 1.6 : e.type === 'van' ? 1.3 : 0.9; if (Math.abs(px - e.x) < hw && Math.abs(pz - e.z) < 2.0) { if (this.pShield) { e.dying = true; e.deathSpin = 0; this.pShield = false; (this.shieldM.material as MeshBasicMaterial).opacity = 0; this.spawnParts(e.x, 0.5, e.z, SCHEMES[this.cIdx].enemy, 15); sfxExplosion(); } else { this.pHit(); } } } }
+    if (this.invT <= 0) { for (const e of this.enemies) { if (e.dead || e.dying) continue; const hw = e.type === 'armored' ? 1.6 : e.type === 'tank' ? 2.2 : e.type === 'van' ? 1.3 : e.type === 'gunship' ? 1.4 : 0.9; if (Math.abs(px - e.x) < hw && Math.abs(pz - e.z) < 2.0) { if (this.pShield) { e.dying = true; e.deathSpin = 0; this.pShield = false; (this.shieldM.material as MeshBasicMaterial).opacity = 0; this.spawnParts(e.x, 0.5, e.z, SCHEMES[this.cIdx].enemy, 15); sfxExplosion(); } else { this.pHit(); } } } }
     // Civilian collision
     if (this.invT <= 0) { for (const c of this.civs) { if (c.dead) continue; if (Math.abs(px - c.x) < 0.9 && Math.abs(pz - c.z) < 2.0) { c.dead = true; this.sCivHits++; sfxCivHit(); this.spawnParts(c.x, 0.5, c.z, SCHEMES[this.cIdx].civilian, 8); this.score = Math.max(0, this.score - 200); this.addPopup(c.x, c.z, -200); this.combo = 1; } } }
     // Road hazard collision
