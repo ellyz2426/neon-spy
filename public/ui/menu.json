@@ -305,6 +305,23 @@
                   "cursor": "pointer"
                 },
                 "dataUid": "uid-22"
+              },
+              {
+                "type": "container",
+                "sourceTag": "div",
+                "children": [
+                  "Leaderboard"
+                ],
+                "properties": {
+                  "name": "btn-leaderboard",
+                  "fontSize": "10",
+                  "color": "#ffcc00",
+                  "backgroundColor": "#222222",
+                  "borderRadius": "8",
+                  "padding": "6",
+                  "cursor": "pointer"
+                },
+                "dataUid": "uid-23"
               }
             ],
             "properties": {
@@ -337,7 +354,7 @@
         "column": 0
       },
       "end": {
-        "line": 30,
+        "line": 31,
         "column": 8
       }
     },
@@ -347,7 +364,7 @@
         "column": 2
       },
       "end": {
-        "line": 29,
+        "line": 30,
         "column": 8
       }
     },
@@ -507,7 +524,7 @@
         "column": 4
       },
       "end": {
-        "line": 28,
+        "line": 29,
         "column": 10
       }
     },
@@ -549,6 +566,16 @@
       "end": {
         "line": 27,
         "column": 153
+      }
+    },
+    "uid-23": {
+      "start": {
+        "line": 28,
+        "column": 6
+      },
+      "end": {
+        "line": 28,
+        "column": 156
       }
     }
   }

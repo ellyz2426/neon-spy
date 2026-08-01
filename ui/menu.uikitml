@@ -26,6 +26,7 @@
       <div name="btn-achievements" font-size="10" color="#aaaaaa" background-color="#222222" border-radius="8" padding="6" cursor="pointer">Achievements</div>
       <div name="btn-stats" font-size="10" color="#aaaaaa" background-color="#222222" border-radius="8" padding="6" cursor="pointer">Stats</div>
       <div name="btn-tutorial" font-size="10" color="#aaaaaa" background-color="#222222" border-radius="8" padding="6" cursor="pointer">How To Play</div>
+      <div name="btn-leaderboard" font-size="10" color="#ffcc00" background-color="#222222" border-radius="8" padding="6" cursor="pointer">Leaderboard</div>
     </div>
   </div>
 </panel>

@@ -52,6 +52,9 @@ interface EMPWave { mesh: Mesh; radius: number; life: number; dead: boolean; }
 interface WeaponsTruck { mesh: Group; x: number; z: number; active: boolean; docked: boolean; dockTimer: number; }
 interface RainDrop { mesh: Mesh; vel: number; }
 interface JumpRamp { mesh: Group; x: number; z: number; dead: boolean; }
+interface ExplosiveBarrel { mesh: Group; x: number; z: number; dead: boolean; chainTimer: number; }
+interface SpeedZoneSeg { mesh: Mesh; z: number; dead: boolean; mult: number; }
+interface LeaderEntry { score: number; wave: number; date: string; }
 
 const ROAD_WIDTH = 12; const LANE_COUNT = 5; const LANE_WIDTH = ROAD_WIDTH / LANE_COUNT;
 const ROAD_SEG_LEN = 40; const ROAD_VIS = 8; const PLAYER_Z = -8;
@@ -95,6 +98,10 @@ function sfxDock() { tone(440, 0.1, 'sine', 0.12); setTimeout(() => tone(550, 0.
 function sfxJump() { tone(300, 0.08, 'sine', 0.1); setTimeout(() => tone(400, 0.1, 'sine', 0.1), 50); setTimeout(() => tone(550, 0.12, 'sine', 0.1), 100); setTimeout(() => tone(700, 0.15, 'sine', 0.08), 150); }
 function sfxLand() { tone(150, 0.2, 'sawtooth', 0.1); tone(80, 0.3, 'square', 0.06); }
 function sfxRainStart() { tone(100, 0.5, 'triangle', 0.04); tone(150, 0.4, 'triangle', 0.03); }
+function sfxCloseCall() { tone(1320, 0.06, 'sine', 0.06); tone(1760, 0.08, 'sine', 0.08); }
+function sfxBarrelExplode() { tone(60, 0.5, 'sawtooth', 0.18); tone(40, 0.6, 'square', 0.12); setTimeout(() => tone(30, 0.4, 'sawtooth', 0.1), 100); }
+function sfxNitro() { tone(200, 0.15, 'sawtooth', 0.1); tone(300, 0.12, 'triangle', 0.08); setTimeout(() => tone(400, 0.1, 'sine', 0.06), 50); }
+function sfxZoneEnter() { tone(600, 0.1, 'sine', 0.08); tone(800, 0.08, 'sine', 0.06); }
 
 let mosc1: OscillatorNode|null = null, mosc2: OscillatorNode|null = null, mosc3: OscillatorNode|null = null;
 let mgain: GainNode|null = null, mgain2: GainNode|null = null, mgain3: GainNode|null = null;
@@ -136,6 +143,7 @@ export class GameSystem extends createSystem({
   statsP:   { required: [PanelUI, PanelDocument], where: [eq(PanelUI, 'config', './ui/stats.json')] },
   tutP:     { required: [PanelUI, PanelDocument], where: [eq(PanelUI, 'config', './ui/tutorial.json')] },
   radarP:   { required: [PanelUI, PanelDocument], where: [eq(PanelUI, 'config', './ui/radar.json')] },
+  lbP:      { required: [PanelUI, PanelDocument], where: [eq(PanelUI, 'config', './ui/leaderboard.json')] },
 }) {
   private _scene!: Scene;
   private gState: 'menu'|'playing'|'paused'|'gameover' = 'menu';
@@ -164,8 +172,9 @@ export class GameSystem extends createSystem({
   private setDoc: UIKitDocument|null = null; private achDoc: UIKitDocument|null = null;
   private statDoc: UIKitDocument|null = null; private tutDoc: UIKitDocument|null = null;
   private radarDoc: UIKitDocument|null = null;
+  private lbDoc: UIKitDocument|null = null;
   private achs: Achievement[] = []; private achPg = 0;
-  private career = { gamesPlayed: 0, totalScore: 0, highScore: 0, totalKills: 0, totalDist: 0, totalPU: 0, totalOil: 0, totalBoss: 0, bestWave: 1, bestCombo: 1, totalSmokes: 0, totalHazards: 0, maxWeapon: 0, bridgesCrossed: 0, perfectWaves: 0, totalMissions: 0, totalVanKills: 0, totalInterceptorKills: 0, totalEMPs: 0, totalDecoys: 0, totalDocks: 0, totalJumps: 0, totalRainDist: 0 };
+  private career = { gamesPlayed: 0, totalScore: 0, highScore: 0, totalKills: 0, totalDist: 0, totalPU: 0, totalOil: 0, totalBoss: 0, bestWave: 1, bestCombo: 1, totalSmokes: 0, totalHazards: 0, maxWeapon: 0, bridgesCrossed: 0, perfectWaves: 0, totalMissions: 0, totalVanKills: 0, totalInterceptorKills: 0, totalEMPs: 0, totalDecoys: 0, totalDocks: 0, totalJumps: 0, totalRainDist: 0, totalCloseCalls: 0, totalBarrels: 0, totalNitros: 0 };
   private sKills = 0; private sOils = 0; private sCivHits = 0; private sSmokes = 0; private sHazardsDodged = 0;
   private puTypes = new Set<string>(); private oilCD = 0; private smokeCD = 0;
   private waveNoDmg = true; private sPerfectWaves = 0; private sBridges = 0;
@@ -193,6 +202,11 @@ export class GameSystem extends createSystem({
   private weaponsTruck: WeaponsTruck | null = null; private truckCD = 0; private sDocks = 0;
   private jumpRamps: JumpRamp[] = []; private rampCD = 0; private isAirborne = false; private airT = 0; private airY = 0; private sJumps = 0;
   private rainDrops: RainDrop[] = []; private isRaining = false; private rainTimer = 0; private rainCD = 0; private sRainDist = 0;
+  // Round 7: Close calls, Explosive barrels, Speed zones, Nitro, Leaderboard
+  private sCloseCalls = 0; private barrels: ExplosiveBarrel[] = []; private barrelCD = 0;
+  private speedZones: SpeedZoneSeg[] = []; private speedZoneCD = 0; private inSpeedZone = false; private speedZoneMult = 1; private sZoneScore = 0; private sZonesEntered = 0;
+  private nitroCharges = 3; private nitroActive = false; private nitroTimer = 0; private sNitrosUsed = 0;
+  private leaderboard: LeaderEntry[] = []; private sBarrelsExploded = 0; private sBarrelKills = 0;
 
   private st(doc: UIKitDocument|null, id: string, text: string) { if (!doc) return; (doc.getElementById(id) as UIKit.Text|undefined)?.setProperties({ text }); }
   private sv(e: Entity, v: boolean) { try { const o = (e as any).object3D; if (o) { const s = v ? 3 : 0; o.scale.set(s, s, s); } } catch {} }
@@ -203,7 +217,7 @@ export class GameSystem extends createSystem({
     this.loadData(); this.initAchs(); this.buildEnv(); this.buildPlayer(); this.createRoad(); this.setupInput(); this.setupPanels(); this.showP('menu');
   }
 
-  private loadData() { try { const s = localStorage.getItem('neon-spy-career'); if (s) this.career = { ...this.career, ...JSON.parse(s) }; const a = localStorage.getItem('neon-spy-achs'); if (a) { (JSON.parse(a) as string[]).forEach(id => { const x = this.achs.find(v => v.id === id); if (x) x.unlocked = true; }); } const c = localStorage.getItem('neon-spy-color'); if (c) this.cIdx = parseInt(c) || 0; } catch {} }
+  private loadData() { try { const s = localStorage.getItem('neon-spy-career'); if (s) this.career = { ...this.career, ...JSON.parse(s) }; const a = localStorage.getItem('neon-spy-achs'); if (a) { (JSON.parse(a) as string[]).forEach(id => { const x = this.achs.find(v => v.id === id); if (x) x.unlocked = true; }); } const c = localStorage.getItem('neon-spy-color'); if (c) this.cIdx = parseInt(c) || 0; this.loadLeaderboard(); } catch {} }
   private saveData() { try { localStorage.setItem('neon-spy-career', JSON.stringify(this.career)); localStorage.setItem('neon-spy-achs', JSON.stringify(this.achs.filter(a => a.unlocked).map(a => a.id))); localStorage.setItem('neon-spy-color', String(this.cIdx)); } catch {} }
 
 
@@ -324,6 +338,25 @@ export class GameSystem extends createSystem({
       { id: 'jump-dodge-mine', name: 'Mine Hopper', desc: 'Jump over a mine', unlocked: false },
       { id: 'dock-full-weapon', name: 'Maximum Firepower', desc: 'Dock at max weapon level for bonus', unlocked: false },
       { id: 'wave-75', name: 'Endurance', desc: 'Reach wave 75', unlocked: false },
+      // Round 7 achievements (18 new — total 128)
+      { id: 'close-call-1', name: 'Close Shave', desc: 'Get your first close call', unlocked: false },
+      { id: 'close-call-10', name: 'Danger Zone', desc: '10 close calls in one game', unlocked: false },
+      { id: 'close-call-25', name: 'Daredevil Racer', desc: '25 close calls in one game', unlocked: false },
+      { id: 'total-close-100', name: 'Close Call Expert', desc: '100 close calls total', unlocked: false },
+      { id: 'barrel-1', name: 'Barrel Roll', desc: 'Explode your first barrel', unlocked: false },
+      { id: 'barrel-chain-3', name: 'Chain Reaction', desc: 'Chain-explode 3+ barrels', unlocked: false },
+      { id: 'barrel-kill', name: 'Collateral Damage', desc: 'Kill enemy with barrel blast', unlocked: false },
+      { id: 'barrel-total-50', name: 'Demolitions Expert', desc: 'Explode 50 barrels total', unlocked: false },
+      { id: 'zone-5', name: 'Zone Runner', desc: 'Enter 5 speed zones', unlocked: false },
+      { id: 'zone-10k', name: 'Zone Master', desc: 'Score 10,000 in speed zones', unlocked: false },
+      { id: 'nitro-1', name: 'Nitro Burst', desc: 'Use your first nitro', unlocked: false },
+      { id: 'nitro-5', name: 'Nitro Addict', desc: 'Use 5 nitros in one game', unlocked: false },
+      { id: 'nitro-kill', name: 'Nitro Kill', desc: 'Kill enemy during nitro', unlocked: false },
+      { id: 'nitro-total-30', name: 'Nitro Veteran', desc: 'Use 30 nitros total', unlocked: false },
+      { id: 'leaderboard-top', name: 'Hall of Fame', desc: 'Get a top 10 score', unlocked: false },
+      { id: 'score-2m', name: 'Multi-Millionaire', desc: 'Score 2,000,000 points', unlocked: false },
+      { id: 'kills-500', name: 'Annihilator', desc: '500 enemies in one game', unlocked: false },
+      { id: 'wave-100', name: 'Centurion', desc: 'Reach wave 100', unlocked: false },
     ];
     try { const a = localStorage.getItem('neon-spy-achs'); if (a) { (JSON.parse(a) as string[]).forEach(id => { const x = this.achs.find(v => v.id === id); if (x) x.unlocked = true; }); } } catch {}
   }
@@ -679,6 +712,124 @@ export class GameSystem extends createSystem({
     return { mesh: g, x: laneX(lane), z, dead: false };
   }
 
+  private mkBarrel(lane: number, z: number): ExplosiveBarrel {
+    const sc = SCHEMES[this.cIdx]; const g = new Group();
+    // Barrel body
+    const body = new Mesh(new CylinderGeometry(0.4, 0.4, 0.9, 8), new MeshBasicMaterial({ color: '#ff4400', transparent: true, opacity: 0.7 }));
+    body.position.y = 0.45; g.add(body);
+    // Hazard stripes
+    const stripe1 = sbox(0.85, 0.1, 0.05, '#ffcc00', 0.8);
+    stripe1.position.set(0, 0.55, 0.4); g.add(stripe1);
+    const stripe2 = sbox(0.85, 0.1, 0.05, '#ffcc00', 0.8);
+    stripe2.position.set(0, 0.35, 0.4); g.add(stripe2);
+    // Warning glow
+    const glow = new Mesh(new SphereGeometry(0.15, 6, 6), new MeshBasicMaterial({ color: '#ff8800', transparent: true, opacity: 0.6 }));
+    glow.position.set(0, 0.95, 0); g.add(glow);
+    g.position.set(laneX(lane), 0, z); this.entG.add(g);
+    return { mesh: g, x: laneX(lane), z, dead: false, chainTimer: -1 };
+  }
+
+  private explodeBarrel(barrel: ExplosiveBarrel, chainCount: number) {
+    barrel.dead = true;
+    sfxBarrelExplode();
+    this.spawnParts(barrel.x, 1, barrel.z, '#ff4400', 25);
+    this.spawnParts(barrel.x, 0.5, barrel.z, '#ffcc00', 15);
+    this.triggerShake(0.12, 0.3);
+    this.sBarrelsExploded++; this.career.totalBarrels++;
+    this.unlock('barrel-1');
+    if (this.career.totalBarrels >= 50) this.unlock('barrel-total-50');
+    // Score
+    const barrelPts = 200 * this.combo;
+    this.score += barrelPts;
+    this.addPopup(barrel.x, barrel.z, barrelPts);
+    if (this.inSpeedZone) this.sZoneScore += barrelPts;
+    // Damage enemies in blast radius
+    for (const e of this.enemies) {
+      if (e.dead || e.dying) continue;
+      const dx = e.x - barrel.x, dz = e.z - barrel.z;
+      if (Math.sqrt(dx * dx + dz * dz) < 6) {
+        e.hp -= 3;
+        this.spawnParts(e.x, 0.5, e.z, '#ff4400', 8);
+        if (e.hp <= 0) {
+          e.dying = true; e.deathSpin = 0;
+          const gained = 300 * this.combo;
+          this.score += gained;
+          this.addPopup(e.x, e.z, gained);
+          sfxExplosion();
+          this.sKills++; this.career.totalKills++;
+          this.sBarrelKills++;
+          this.onEnemyKill(e.type, false);
+          this.unlock('barrel-kill');
+        }
+      }
+    }
+    // Chain to nearby barrels
+    let chainHit = 0;
+    for (const b of this.barrels) {
+      if (b.dead || b === barrel) continue;
+      const dx = b.x - barrel.x, dz = b.z - barrel.z;
+      if (Math.sqrt(dx * dx + dz * dz) < 8 && b.chainTimer < 0) {
+        b.chainTimer = 0.15 + chainCount * 0.1;
+        chainHit++;
+      }
+    }
+    if (chainCount + chainHit >= 3) this.unlock('barrel-chain-3');
+  }
+
+  private mkSpeedZone(z: number): SpeedZoneSeg {
+    const sc = SCHEMES[this.cIdx];
+    const zoneLen = 30;
+    const m = new Mesh(new BoxGeometry(ROAD_WIDTH - 1, 0.03, zoneLen), new MeshBasicMaterial({ color: '#00ff88', transparent: true, opacity: 0.08 }));
+    m.position.set(0, 0.03, z); this._scene.add(m);
+    return { mesh: m, z, dead: false, mult: 2 };
+  }
+
+  private fireNitro() {
+    if (this.nitroCharges <= 0 || this.nitroActive) return;
+    this.nitroActive = true; this.nitroTimer = 3;
+    this.nitroCharges--;
+    this.sNitrosUsed++; this.career.totalNitros++;
+    sfxNitro();
+    this.unlock('nitro-1');
+    if (this.sNitrosUsed >= 5) this.unlock('nitro-5');
+    if (this.career.totalNitros >= 30) this.unlock('nitro-total-30');
+    this.spawnParts(this.pX, 0.3, PLAYER_Z - 1.5, '#ff6600', 12);
+  }
+
+  private loadLeaderboard() {
+    try { const s = localStorage.getItem('neon-spy-leaderboard'); if (s) this.leaderboard = JSON.parse(s); } catch {}
+  }
+  private saveLeaderboard() {
+    try { localStorage.setItem('neon-spy-leaderboard', JSON.stringify(this.leaderboard)); } catch {}
+  }
+  private addToLeaderboard(score: number, wave: number) {
+    const now = new Date();
+    const dateStr = `${now.getMonth()+1}/${now.getDate()}`;
+    this.leaderboard.push({ score, wave, date: dateStr });
+    this.leaderboard.sort((a, b) => b.score - a.score);
+    this.leaderboard = this.leaderboard.slice(0, 10);
+    if (this.leaderboard.findIndex(e => e.score === score) < 10) this.unlock('leaderboard-top');
+    this.saveLeaderboard();
+  }
+
+  private checkCloseCall(enemyX: number, enemyZ: number) {
+    if (this.invT > 0 || this.pShield || this.isAirborne) return;
+    const dx = Math.abs(this.pX - enemyX);
+    const dz = Math.abs(PLAYER_Z - enemyZ);
+    // Close call: within near-miss range but not collision
+    if (dx < 1.8 && dx > 0.8 && dz < 2.5) {
+      this.sCloseCalls++; this.career.totalCloseCalls++;
+      const ccPts = 50 * this.combo;
+      this.score += ccPts;
+      this.addPopup(this.pX, PLAYER_Z + 1, ccPts);
+      sfxCloseCall();
+      this.unlock('close-call-1');
+      if (this.sCloseCalls >= 10) this.unlock('close-call-10');
+      if (this.sCloseCalls >= 25) this.unlock('close-call-25');
+      if (this.career.totalCloseCalls >= 100) this.unlock('total-close-100');
+    }
+  }
+
   private startRain() {
     if (this.isRaining) return;
     this.isRaining = true;
@@ -824,12 +975,14 @@ export class GameSystem extends createSystem({
       { n: 'settings', c: './ui/settings.json' }, { n: 'achievements', c: './ui/achievements.json' },
       { n: 'stats', c: './ui/stats.json' }, { n: 'tutorial', c: './ui/tutorial.json' },
       { n: 'radar', c: './ui/radar.json' },
+      { n: 'leaderboard', c: './ui/leaderboard.json' },
     ];
     for (const pc of pcs) {
       const obj = new Group();
       obj.position.set(0, 2.5, -3); obj.scale.set(3, 3, 3);
       if (pc.n === 'hud') { obj.position.set(0, 3.5, -4); obj.scale.set(2.5, 2.5, 2.5); }
       if (pc.n === 'radar') { obj.position.set(2.8, 3.0, -3.5); obj.scale.set(2, 2, 2); }
+      if (pc.n === 'leaderboard') { obj.position.set(0, 2.5, -3); obj.scale.set(3, 3, 3); }
       this._scene.add(obj);
       const ent = this.world.createTransformEntity(obj);
       ent.addComponent(PanelUI, { config: pc.c });
@@ -844,6 +997,7 @@ export class GameSystem extends createSystem({
     this.queries.statsP.subscribe('qualify', (e) => { this.statDoc = e.getValue(PanelDocument, 'document') as UIKitDocument; this.wireStat(); });
     this.queries.tutP.subscribe('qualify', (e) => { this.tutDoc = e.getValue(PanelDocument, 'document') as UIKitDocument; this.wireTut(); });
     this.queries.radarP.subscribe('qualify', (e) => { this.radarDoc = e.getValue(PanelDocument, 'document') as UIKitDocument; });
+    this.queries.lbP.subscribe('qualify', (e) => { this.lbDoc = e.getValue(PanelDocument, 'document') as UIKitDocument; this.wireLB(); });
   }
 
   private showP(name: string) {
@@ -858,7 +1012,7 @@ export class GameSystem extends createSystem({
     const b = (id: string, fn: () => void) => (this.menuDoc!.getElementById(id) as UIKit.Text|undefined)?.addEventListener('click', fn);
     b('btn-start', () => this.startG()); b('btn-arcade', () => { this.mode = 'arcade'; this.updMode(); }); b('btn-speed', () => { this.mode = 'speed'; this.updMode(); }); b('btn-zen', () => { this.mode = 'zen'; this.updMode(); }); b('btn-challenge', () => { this.mode = 'challenge'; this.updMode(); });
     b('btn-normal', () => { this.diff = 'normal'; this.updDiff(); }); b('btn-hard', () => { this.diff = 'hard'; this.updDiff(); }); b('btn-insane', () => { this.diff = 'insane'; this.updDiff(); });
-    b('btn-settings', () => this.showP('settings')); b('btn-achievements', () => { this.updAchDisp(); this.showP('achievements'); }); b('btn-stats', () => { this.updStats(); this.showP('stats'); }); b('btn-tutorial', () => this.showP('tutorial'));
+    b('btn-settings', () => this.showP('settings')); b('btn-achievements', () => { this.updAchDisp(); this.showP('achievements'); }); b('btn-stats', () => { this.updStats(); this.showP('stats'); }); b('btn-tutorial', () => this.showP('tutorial')); b('btn-leaderboard', () => { this.updLB(); this.showP('leaderboard'); });
     this.updMode(); this.updDiff(); this.st(this.menuDoc, 'high-score', `Best: ${this.career.highScore}`);
   }
 
@@ -871,6 +1025,15 @@ export class GameSystem extends createSystem({
   private wireAch() { if (!this.achDoc) return; (this.achDoc.getElementById('btn-ach-back') as UIKit.Text|undefined)?.addEventListener('click', () => this.showP('menu')); (this.achDoc.getElementById('btn-ach-next') as UIKit.Text|undefined)?.addEventListener('click', () => { this.achPg++; this.updAchDisp(); }); (this.achDoc.getElementById('btn-ach-prev') as UIKit.Text|undefined)?.addEventListener('click', () => { this.achPg = Math.max(0, this.achPg - 1); this.updAchDisp(); }); this.updAchDisp(); }
   private wireStat() { if (!this.statDoc) return; (this.statDoc.getElementById('btn-stats-back') as UIKit.Text|undefined)?.addEventListener('click', () => this.showP('menu')); this.updStats(); }
   private wireTut() { if (!this.tutDoc) return; (this.tutDoc.getElementById('btn-tutorial-back') as UIKit.Text|undefined)?.addEventListener('click', () => this.showP('menu')); }
+  private wireLB() { if (!this.lbDoc) return; (this.lbDoc.getElementById('btn-lb-back') as UIKit.Text|undefined)?.addEventListener('click', () => this.showP('menu')); this.updLB(); }
+  private updLB() {
+    if (!this.lbDoc) return;
+    for (let i = 0; i < 10; i++) {
+      const e = this.leaderboard[i];
+      if (e) { this.st(this.lbDoc, `lb-${i}`, `#${i+1}  ${e.score.toLocaleString()}  W${e.wave}  ${e.date}`); }
+      else { this.st(this.lbDoc, `lb-${i}`, i === 0 ? 'No scores yet' : ''); }
+    }
+  }
 
   private applyCS() { const sc = SCHEMES[this.cIdx]; this._scene.background = new Color(sc.bg); const f = this._scene.fog as FogExp2; if (f) f.color = new Color(sc.bg); this.st(this.setDoc, 'color-name', sc.name); this.saveData(); }
 
@@ -894,6 +1057,9 @@ export class GameSystem extends createSystem({
     this.st(this.statDoc, 'stat-docks', `Truck Docks: ${c.totalDocks || 0}`);
     this.st(this.statDoc, 'stat-jumps', `Ramp Jumps: ${c.totalJumps || 0}`);
     this.st(this.statDoc, 'stat-rain', `Rain Distance: ${Math.floor(c.totalRainDist || 0)}m`);
+    this.st(this.statDoc, 'stat-closecalls', `Close Calls: ${c.totalCloseCalls || 0}`);
+    this.st(this.statDoc, 'stat-barrels', `Barrels Exploded: ${c.totalBarrels || 0}`);
+    this.st(this.statDoc, 'stat-nitros', `Nitros Used: ${c.totalNitros || 0}`);
     try { const fc = localStorage.getItem('neon-spy-formations'); this.st(this.statDoc, 'stat-formations', `Formations Cleared: ${fc || '0'}`); } catch {}
   }
 
@@ -931,6 +1097,11 @@ export class GameSystem extends createSystem({
     this.jumpRamps = []; this.rampCD = 12; this.isAirborne = false; this.airT = 0; this.airY = 0; this.sJumps = 0;
     this.stopRain(); this.rainTimer = 0; this.rainCD = 50; this.sRainDist = 0;
     this.rainKills = 0; this.seenDay = true; this.seenNight = false; this.seenRain = false;
+    // R7 resets
+    this.sCloseCalls = 0; this.barrels = []; this.barrelCD = 15;
+    this.speedZones = []; this.speedZoneCD = 30; this.inSpeedZone = false; this.speedZoneMult = 1; this.sZoneScore = 0; this.sZonesEntered = 0;
+    this.nitroCharges = 3; this.nitroActive = false; this.nitroTimer = 0; this.sNitrosUsed = 0;
+    this.sBarrelsExploded = 0; this.sBarrelKills = 0;
 
     this.modesPlayed.add(this.mode);
     try { const mp = localStorage.getItem('neon-spy-modes'); if (mp) JSON.parse(mp).forEach((m: string) => this.modesPlayed.add(m)); } catch {}
@@ -955,9 +1126,12 @@ export class GameSystem extends createSystem({
     if (this.weaponsTruck) { this.entG.remove(this.weaponsTruck.mesh); this.weaponsTruck = null; }
     for (const jr of this.jumpRamps) this.entG.remove(jr.mesh);
     for (const rd of this.rainDrops) this._scene.remove(rd.mesh);
+    for (const br of this.barrels) this.entG.remove(br.mesh);
+    for (const sz of this.speedZones) this._scene.remove(sz.mesh);
     this.enemies = []; this.civs = []; this.bullets = []; this.pups = []; this.oils = []; this.parts = [];
     this.smokes = []; this.hazards = []; this.popups = []; this.trails = []; this.mines = []; this.roadObjs = [];
     this.decoys = []; this.empWaves = []; this.jumpRamps = []; this.rainDrops = []; this.isRaining = false;
+    this.barrels = []; this.speedZones = []; this.inSpeedZone = false;
   }
 
   private pauseG() { this.gState = 'paused'; this.showP('pause'); }
@@ -981,20 +1155,23 @@ export class GameSystem extends createSystem({
     if (this.wave >= 60) this.unlock('wave-60');
     if (this.dist >= 1000) this.unlock('dist-1k'); if (this.dist >= 5000) this.unlock('dist-5k'); if (this.dist >= 10000) this.unlock('dist-10k');
     if (this.career.totalDist >= 50000) this.unlock('total-dist-50k');
-    if (this.sKills >= 200) this.unlock('kills-200'); if (this.sKills >= 300) this.unlock('kills-300');
-    if (this.score >= 1000000) this.unlock('score-1m');
+    if (this.sKills >= 200) this.unlock('kills-200'); if (this.sKills >= 300) this.unlock('kills-300'); if (this.sKills >= 500) this.unlock('kills-500');
+    if (this.score >= 1000000) this.unlock('score-1m'); if (this.score >= 2000000) this.unlock('score-2m');
     if (this.career.totalKills >= 1000) this.unlock('total-kills-1k');
     if (this.career.perfectWaves >= 10) this.unlock('perfect-10');
     if (this.wave >= 5 && this.sCivHits === 0) this.unlock('clean-op');
     if (this.wave >= 5 && this.weaponLvl === 0) this.unlock('no-weapon-wave5');
-    if (this.wave >= 75) this.unlock('wave-75');
+    if (this.wave >= 75) this.unlock('wave-75'); if (this.wave >= 100) this.unlock('wave-100');
     this.career.totalRainDist += this.sRainDist;
     if (this.career.totalRainDist >= 5000) this.unlock('total-rain-5k');
+    this.addToLeaderboard(this.score, this.wave);
+    if (this.sZoneScore >= 10000) this.unlock('zone-10k');
     this.st(this.resDoc, 'result-score', `Score: ${this.score}`); this.st(this.resDoc, 'result-wave', `Wave: ${this.wave}`);
     this.st(this.resDoc, 'result-distance', `Distance: ${Math.floor(this.dist)}m`); this.st(this.resDoc, 'result-combo', `Max Combo: ${this.maxCombo}x`);
     this.st(this.resDoc, 'result-kills', `Kills: ${this.sKills}`);
     this.st(this.resDoc, 'result-weapon', `Weapon: Lv${this.weaponLvl}`);
-    this.st(this.resDoc, 'result-extra', `Docks:${this.sDocks} Jumps:${this.sJumps} Missions:${this.sMissionsCompleted}`);
+    this.st(this.resDoc, 'result-extra', `Docks:${this.sDocks} Jumps:${this.sJumps} Missions:${this.sMissionsCompleted} Nitro:${this.sNitrosUsed}`);
+    this.st(this.resDoc, 'result-close', `Close Calls: ${this.sCloseCalls} | Barrels: ${this.sBarrelsExploded} | Zones: ${this.sZonesEntered}`);
     this.st(this.resDoc, 'result-best', this.score >= this.career.highScore ? 'NEW HIGH SCORE!' : `Best: ${this.career.highScore}`);
     this.showP('results');
   }
@@ -1009,7 +1186,7 @@ export class GameSystem extends createSystem({
     const dt = Math.min(delta, 0.05); this.gTime += dt;
     if (this.mode === 'speed' && this.gTime >= 120) { this.gameOver(); return; }
     this.handleInput(dt);
-    const spd = this.spdBoost ? this.scrollSpd * 1.5 : this.scrollSpd; this.dist += spd * dt;
+    const spd = this.nitroActive ? this.scrollSpd * 2 : this.spdBoost ? this.scrollSpd * 1.5 : this.scrollSpd; this.dist += spd * dt;
     // Road scroll + bridge/tunnel tracking
     for (const s of this.roadSegs) { s.z -= spd * dt; s.mesh.position.z = s.z; }
     while (this.roadSegs.length > 0 && this.roadSegs[0].z < PLAYER_Z - ROAD_SEG_LEN * 2) {
@@ -1240,8 +1417,48 @@ export class GameSystem extends createSystem({
     if (!this.isNight && !this.isRaining) this.seenDay = true;
     if (this.isNight) this.seenNight = true;
     if (this.seenDay && this.seenNight && this.seenRain) this.unlock('all-weather');
+    // Explosive barrel spawning
+    this.barrelCD -= dt;
+    if (this.barrelCD <= 0 && this.wave >= 3) {
+      this.barrels.push(this.mkBarrel(ri(0, LANE_COUNT - 1), PLAYER_Z + 75 + rf(0, 10)));
+      // Sometimes spawn barrel clusters for chain reaction potential
+      if (Math.random() < 0.3) {
+        const cl = ri(0, LANE_COUNT - 1);
+        this.barrels.push(this.mkBarrel(cl, PLAYER_Z + 78 + rf(0, 5)));
+        if (Math.random() < 0.4) this.barrels.push(this.mkBarrel(clp(cl + ri(-1, 1), 0, LANE_COUNT - 1), PLAYER_Z + 80 + rf(0, 5)));
+      }
+      this.barrelCD = rf(8, 14) - this.wave * 0.1;
+    }
+    // Speed zone spawning
+    this.speedZoneCD -= dt;
+    if (this.speedZoneCD <= 0 && this.wave >= 2) {
+      this.speedZones.push(this.mkSpeedZone(PLAYER_Z + 70));
+      this.speedZoneCD = rf(25, 40);
+    }
+    // Check if player is in speed zone
+    this.inSpeedZone = false;
+    for (const sz of this.speedZones) {
+      if (!sz.dead && PLAYER_Z >= sz.z - 15 && PLAYER_Z <= sz.z + 15) {
+        this.inSpeedZone = true; this.speedZoneMult = sz.mult;
+        break;
+      }
+    }
+    // Nitro boost system
+    if (this.keys.has('3') && !this.nitroActive && this.nitroCharges > 0) { this.fireNitro(); }
+    if (this.nitroActive) {
+      this.nitroTimer -= dt;
+      // Nitro trail particles
+      if (Math.random() < 0.5) {
+        const tp = new Mesh(new BoxGeometry(0.3, 0.15, 0.2), new MeshBasicMaterial({ color: '#ff6600', transparent: true, opacity: 0.7 }));
+        tp.position.set(this.pX + rf(-0.5, 0.5), 0.15, PLAYER_Z - 1.5); this._scene.add(tp);
+        this.trails.push({ mesh: tp, life: 0.4 });
+      }
+      if (this.nitroTimer <= 0) { this.nitroActive = false; }
+    }
+    // Nitro recharge every 8 waves
+    if (this.wave % 8 === 0 && this.waveT < dt * 2 && this.nitroCharges < 3) { this.nitroCharges = Math.min(3, this.nitroCharges + 1); }
     // Update all entities
-    this.updEnemies(dt, spd, time); this.updCivs(dt, spd); this.updBullets(dt); this.updPUs(dt, spd); this.updOils(dt, spd); this.updSmokes(dt, spd); this.updParts(dt); this.updPopups(dt); this.updTrails(dt); this.updHazards(dt, spd); this.updMines(dt, spd); this.updRoadObjs(dt, spd); this.updDecoys(dt, spd, time); this.updEMPWaves(dt); this.updRamps(dt, spd); this.checkColl(time);
+    this.updEnemies(dt, spd, time); this.updCivs(dt, spd); this.updBullets(dt); this.updPUs(dt, spd); this.updOils(dt, spd); this.updSmokes(dt, spd); this.updParts(dt); this.updPopups(dt); this.updTrails(dt); this.updHazards(dt, spd); this.updMines(dt, spd); this.updRoadObjs(dt, spd); this.updDecoys(dt, spd, time); this.updEMPWaves(dt); this.updRamps(dt, spd); this.updBarrels(dt, spd); this.updSpeedZones(dt, spd); this.checkColl(time);
     this.updHUD(); this.updRadar();
     this.pGroup.position.x = this.pX;
     // Headlight flicker (handled in night mode section above for night, basic here for day)
@@ -1319,7 +1536,9 @@ export class GameSystem extends createSystem({
           e.fireTimer = ENEMY_FIRE_RATE * rateScale / (1 + this.wave * 0.1);
         }
       }
-      if (e.z < PLAYER_Z - 20) e.dead = true;
+      if (e.z < PLAYER_Z - 20) { e.dead = true; }
+      // Close call detection — enemy passing near player
+      else if (!e.dying && e.z < PLAYER_Z + 0.5 && e.z > PLAYER_Z - 1.5) { this.checkCloseCall(e.x, e.z); }
     }
     this.enemies = this.enemies.filter(e => { if (e.dead) { this.entG.remove(e.mesh); return false; } return true; });
   }
@@ -1418,6 +1637,42 @@ export class GameSystem extends createSystem({
     }
     this.jumpRamps = this.jumpRamps.filter(r => { if (r.dead) { this.entG.remove(r.mesh); return false; } return true; });
   }
+  private updBarrels(dt: number, ss: number) {
+    for (const b of this.barrels) {
+      if (b.dead) continue;
+      b.z -= ss * dt; b.mesh.position.z = b.z;
+      // Chain timer
+      if (b.chainTimer > 0) {
+        b.chainTimer -= dt;
+        if (b.chainTimer <= 0) {
+          this.explodeBarrel(b, 1);
+        }
+      }
+      // Warning glow pulse
+      const glow = b.mesh.children[3];
+      if (glow) (glow as Mesh).material = new MeshBasicMaterial({ color: '#ff8800', transparent: true, opacity: 0.4 + Math.sin(b.z * 3) * 0.3 });
+      if (b.z < PLAYER_Z - 10) b.dead = true;
+    }
+    this.barrels = this.barrels.filter(b => { if (b.dead) { this.entG.remove(b.mesh); return false; } return true; });
+  }
+  private updSpeedZones(dt: number, ss: number) {
+    for (const sz of this.speedZones) {
+      if (sz.dead) continue;
+      sz.z -= ss * dt; sz.mesh.position.z = sz.z;
+      // Pulse opacity
+      (sz.mesh.material as MeshBasicMaterial).opacity = 0.06 + Math.sin(sz.z * 0.5) * 0.03;
+      // Track zone entry
+      if (!sz.dead && PLAYER_Z >= sz.z - 15 && PLAYER_Z <= sz.z + 15) {
+        if (!this.inSpeedZone) {
+          sfxZoneEnter();
+          this.sZonesEntered++;
+          if (this.sZonesEntered >= 5) this.unlock('zone-5');
+        }
+      }
+      if (sz.z < PLAYER_Z - 20) sz.dead = true;
+    }
+    this.speedZones = this.speedZones.filter(sz => { if (sz.dead) { this._scene.remove(sz.mesh); return false; } return true; });
+  }
   private updParts(dt: number) { for (const p of this.parts) { p.vel.y -= 9.8 * dt; p.mesh.position.add(p.vel.clone().multiplyScalar(dt)); p.life -= dt; (p.mesh.material as MeshBasicMaterial).opacity = Math.max(0, p.life / p.maxLife); } this.parts = this.parts.filter(p => { if (p.life <= 0) { this._scene.remove(p.mesh); return false; } return true; }); }
   private updPopups(dt: number) { for (const p of this.popups) { p.y += dt * 2; p.mesh.position.y = p.y; p.life -= dt; (p.mesh.material as MeshBasicMaterial).opacity = Math.max(0, p.life); } this.popups = this.popups.filter(p => { if (p.life <= 0) { this._scene.remove(p.mesh); return false; } return true; }); }
   private updTrails(dt: number) { for (const t of this.trails) { t.life -= dt; (t.mesh.material as MeshBasicMaterial).opacity = Math.max(0, t.life * 0.8); } this.trails = this.trails.filter(t => { if (t.life <= 0) { this._scene.remove(t.mesh); return false; } return true; }); }
@@ -1426,7 +1681,9 @@ export class GameSystem extends createSystem({
   private checkColl(time: number) {
     const px = this.pX, pz = PLAYER_Z;
     // Player bullets vs enemies
-    for (const b of this.bullets) { if (b.dead || !b.fromPlayer) continue; for (const e of this.enemies) { if (e.dead || e.dying) continue; const hw = e.type === 'armored' ? 1.8 : e.type === 'van' ? 1.4 : e.type === 'helicopter' ? 1.0 : e.type === 'interceptor' ? 0.8 : 0.7; const hd = e.type === 'armored' ? 3.5 : e.type === 'van' ? 2.8 : 2.2; if (Math.abs(b.x - e.x) < hw && Math.abs(b.z - e.z) < hd) { b.dead = true; e.hp--; sfxHit(); if (e.hp <= 0) { e.dying = true; e.deathSpin = 0; let pts: number; if (e.type === 'armored') pts = 1000; else if (e.type === 'helicopter') pts = 300; else if (e.type === 'motorcycle') pts = 150; else if (e.type === 'van') pts = 250; else if (e.type === 'interceptor') pts = 350; else pts = 100; const gained = pts * this.combo; this.score += gained; this.addPopup(e.x, e.z, gained); this.spawnParts(e.x, 0.5, e.z, SCHEMES[this.cIdx].enemy, e.type === 'armored' ? 25 : 15); sfxExplosion(); if (e.type === 'armored') this.triggerShake(0.15, 0.3); this.sKills++; this.career.totalKills++; this.onEnemyKill(e.type, false); if (this.isAirborne) this.unlock('jump-kill'); this.recentKillTimes.push(time); this.recentKillTimes = this.recentKillTimes.filter(t => time - t < 1); if (this.recentKillTimes.length >= 3) this.unlock('multi-kill-3'); this.combo = Math.min(8, this.combo + 1); this.comboT = COMBO_DECAY; if (this.combo > this.maxCombo) this.maxCombo = this.combo; if (this.combo >= 3) { this.unlock('combo-3'); sfxCombo(); } if (this.combo >= 5) this.unlock('combo-5'); if (this.combo >= 8) this.unlock('combo-8'); this.unlock('first-kill'); if (this.sKills >= 10) this.unlock('kills-10'); if (this.sKills >= 25) this.unlock('kills-25'); if (this.sKills >= 50) this.unlock('kills-50'); if (this.sKills >= 100) this.unlock('kills-100'); if (this.sKills >= 200) this.unlock('kills-200'); if (this.sKills >= 300) this.unlock('kills-300'); if (e.type === 'armored') { this.career.totalBoss++; this.unlock('boss-kill'); if (this.career.totalBoss >= 5) this.unlock('boss-5'); if (this.isRaining) this.unlock('rain-boss'); } if (this.spdBoost) this.unlock('speed-kill'); if (this.isRaining) { this.rainKills++; if (this.rainKills >= 10) this.unlock('rain-kill-10'); } for (const sm of this.smokes) { if (!sm.dead && Math.abs(e.x - sm.x) < 2 && Math.abs(e.z - sm.z) < 3) { this.unlock('smoke-kill'); break; } } } else { this.spawnParts(b.x, 0.5, b.z, '#ffffff', 4); } break; } } }
+    for (const b of this.bullets) { if (b.dead || !b.fromPlayer) continue; for (const e of this.enemies) { if (e.dead || e.dying) continue; const hw = e.type === 'armored' ? 1.8 : e.type === 'van' ? 1.4 : e.type === 'helicopter' ? 1.0 : e.type === 'interceptor' ? 0.8 : 0.7; const hd = e.type === 'armored' ? 3.5 : e.type === 'van' ? 2.8 : 2.2; if (Math.abs(b.x - e.x) < hw && Math.abs(b.z - e.z) < hd) { b.dead = true; e.hp--; sfxHit(); if (e.hp <= 0) { e.dying = true; e.deathSpin = 0; let pts: number; if (e.type === 'armored') pts = 1000; else if (e.type === 'helicopter') pts = 300; else if (e.type === 'motorcycle') pts = 150; else if (e.type === 'van') pts = 250; else if (e.type === 'interceptor') pts = 350; else pts = 100; const scoreMult = this.inSpeedZone ? this.speedZoneMult : 1; const gained = pts * this.combo * scoreMult; this.score += gained; if (this.inSpeedZone) this.sZoneScore += gained; this.addPopup(e.x, e.z, gained); this.spawnParts(e.x, 0.5, e.z, SCHEMES[this.cIdx].enemy, e.type === 'armored' ? 25 : 15); sfxExplosion(); if (e.type === 'armored') this.triggerShake(0.15, 0.3); this.sKills++; this.career.totalKills++; this.onEnemyKill(e.type, false); if (this.isAirborne) this.unlock('jump-kill'); if (this.nitroActive) this.unlock('nitro-kill'); this.recentKillTimes.push(time); this.recentKillTimes = this.recentKillTimes.filter(t => time - t < 1); if (this.recentKillTimes.length >= 3) this.unlock('multi-kill-3'); this.combo = Math.min(8, this.combo + 1); this.comboT = COMBO_DECAY; if (this.combo > this.maxCombo) this.maxCombo = this.combo; if (this.combo >= 3) { this.unlock('combo-3'); sfxCombo(); } if (this.combo >= 5) this.unlock('combo-5'); if (this.combo >= 8) this.unlock('combo-8'); this.unlock('first-kill'); if (this.sKills >= 10) this.unlock('kills-10'); if (this.sKills >= 25) this.unlock('kills-25'); if (this.sKills >= 50) this.unlock('kills-50'); if (this.sKills >= 100) this.unlock('kills-100'); if (this.sKills >= 200) this.unlock('kills-200'); if (this.sKills >= 300) this.unlock('kills-300'); if (this.sKills >= 500) this.unlock('kills-500'); if (e.type === 'armored') { this.career.totalBoss++; this.unlock('boss-kill'); if (this.career.totalBoss >= 5) this.unlock('boss-5'); if (this.isRaining) this.unlock('rain-boss'); } if (this.spdBoost) this.unlock('speed-kill'); if (this.isRaining) { this.rainKills++; if (this.rainKills >= 10) this.unlock('rain-kill-10'); } for (const sm of this.smokes) { if (!sm.dead && Math.abs(e.x - sm.x) < 2 && Math.abs(e.z - sm.z) < 3) { this.unlock('smoke-kill'); break; } } } else { this.spawnParts(b.x, 0.5, b.z, '#ffffff', 4); } break; } } }
+    // Player bullets vs barrels
+    for (const b of this.bullets) { if (b.dead || !b.fromPlayer) continue; for (const br of this.barrels) { if (br.dead) continue; if (Math.abs(b.x - br.x) < 0.8 && Math.abs(b.z - br.z) < 1.2) { b.dead = true; this.explodeBarrel(br, 0); break; } } }
     // Skip body collisions when airborne
     if (!this.isAirborne) {
     // Enemy bullets vs player
@@ -1439,6 +1696,8 @@ export class GameSystem extends createSystem({
     if (this.invT <= 0) { for (const h of this.hazards) { if (h.dead) continue; const hr = h.type === 'barrier' ? 1.2 : 0.7; if (Math.abs(px - h.x) < hr && Math.abs(pz - h.z) < 1.5) { h.dead = true; sfxHazard(); this.spawnParts(h.x, 0.3, h.z, '#ff6600', 8); if (this.pShield) { this.pShield = false; (this.shieldM.material as MeshBasicMaterial).opacity = 0; } else { this.pHit(); } } } }
     // Mine collision
     if (this.invT <= 0) { for (const m of this.mines) { if (m.dead) continue; if (Math.abs(px - m.x) < 0.7 && Math.abs(pz - m.z) < 0.7) { m.dead = true; sfxExplosion(); this.spawnParts(m.x, 0.3, m.z, '#ff2200', 15); this.triggerShake(0.1, 0.2); if (this.pShield) { this.pShield = false; (this.shieldM.material as MeshBasicMaterial).opacity = 0; } else { this.pHit(); } } } }
+    // Barrel body collision (player runs into barrel)
+    for (const br of this.barrels) { if (br.dead) continue; if (Math.abs(px - br.x) < 0.8 && Math.abs(pz - br.z) < 1.0) { this.explodeBarrel(br, 0); if (this.invT <= 0 && !this.pShield) { this.pHit(); } else if (this.pShield) { this.pShield = false; (this.shieldM.material as MeshBasicMaterial).opacity = 0; } } }
     } // end airborne skip
     // Power-up pickup
     for (const pu of this.pups) { if (pu.dead) continue; if (Math.abs(px - pu.x) < 1.2 && Math.abs(pz - pu.z) < 2.2) { pu.dead = true; sfxPowerUp(); this.career.totalPU++; this.puTypes.add(pu.type);
@@ -1456,7 +1715,7 @@ export class GameSystem extends createSystem({
       this.spawnParts(pu.x, 0.5, pu.z, SCHEMES[this.cIdx].powerup, 10);
     } }
     // Oil slick vs enemies
-    for (const o of this.oils) { if (o.dead) continue; for (const e of this.enemies) { if (e.dead || e.dying) continue; if (Math.abs(o.x - e.x) < 1.0 && Math.abs(o.z - e.z) < 1.5) { e.dying = true; e.deathSpin = 0; o.dead = true; const gained = 200 * this.combo; this.score += gained; this.addPopup(e.x, e.z, gained); this.spawnParts(e.x, 0.5, e.z, '#333333', 12); sfxHit(); this.sKills++; this.career.totalKills++; this.onEnemyKill(e.type, true); if (e.type === 'armored') { this.career.totalBoss++; this.unlock('oil-boss'); } } } }
+    for (const o of this.oils) { if (o.dead) continue; for (const e of this.enemies) { if (e.dead || e.dying) continue; if (Math.abs(o.x - e.x) < 1.0 && Math.abs(o.z - e.z) < 1.5) { e.dying = true; e.deathSpin = 0; o.dead = true; const scoreMult = this.inSpeedZone ? this.speedZoneMult : 1; const gained = 200 * this.combo * scoreMult; this.score += gained; if (this.inSpeedZone) this.sZoneScore += gained; this.addPopup(e.x, e.z, gained); this.spawnParts(e.x, 0.5, e.z, '#333333', 12); sfxHit(); this.sKills++; this.career.totalKills++; this.onEnemyKill(e.type, true); if (e.type === 'armored') { this.career.totalBoss++; this.unlock('oil-boss'); } } } }
   }
 
   private pHit() {
@@ -1518,7 +1777,10 @@ export class GameSystem extends createSystem({
     const nightStr = this.isNight ? ' | NIGHT' : '';
     const rainStr = this.isRaining ? ' | RAIN' : '';
     const airStr = this.isAirborne ? ' | AIRBORNE' : '';
-    this.st(this.hudDoc, 'gadget-status', gadgetStr + heatStr + nightStr + rainStr + airStr);
+    const zoneStr = this.inSpeedZone ? ' | 2x ZONE' : '';
+    const nitroStr = this.nitroActive ? ' | NITRO!' : '';
+    this.st(this.hudDoc, 'gadget-status', gadgetStr + heatStr + nightStr + rainStr + airStr + zoneStr + nitroStr);
+    this.st(this.hudDoc, 'nitro-status', `Nitro: ${'*'.repeat(this.nitroCharges)} | Close: ${this.sCloseCalls}`);
     if (this.mode === 'speed') this.st(this.hudDoc, 'mode-info', `Time: ${Math.ceil(120 - this.gTime)}s`);
     else if (this.mode === 'challenge') this.st(this.hudDoc, 'mode-info', `Moves: ${500 - this.moves}`);
     else this.st(this.hudDoc, 'mode-info', '');

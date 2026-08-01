@@ -1,0 +1,18 @@
+<panel>
+  <div background-color="rgba(0,0,0,0.9)" border-radius="20" padding="14" flex-direction="column" align-items="center" gap="6">
+    <div font-size="18" font-weight="bold" color="#ffcc00">LEADERBOARD</div>
+    <div flex-direction="column" gap="4" align-items="flex-start">
+      <div name="lb-0" font-size="10" color="#ffcc00">No scores yet</div>
+      <div name="lb-1" font-size="10" color="#ffffff"></div>
+      <div name="lb-2" font-size="10" color="#ffffff"></div>
+      <div name="lb-3" font-size="10" color="#ffffff"></div>
+      <div name="lb-4" font-size="10" color="#ffffff"></div>
+      <div name="lb-5" font-size="10" color="#aaaaaa"></div>
+      <div name="lb-6" font-size="10" color="#aaaaaa"></div>
+      <div name="lb-7" font-size="10" color="#aaaaaa"></div>
+      <div name="lb-8" font-size="10" color="#aaaaaa"></div>
+      <div name="lb-9" font-size="10" color="#aaaaaa"></div>
+    </div>
+    <div name="btn-lb-back" font-size="11" color="#ffffff" background-color="#555555" border-radius="10" padding-top="5" padding-bottom="5" padding-left="14" padding-right="14" margin-top="4" cursor="pointer">Back</div>
+  </div>
+</panel>

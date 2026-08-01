@@ -13,6 +13,7 @@
     </div>
     <div name="powerup-status" font-size="9" color="#ffff00"></div>
     <div name="gadget-status" font-size="9" color="#00ccff"></div>
+    <div name="nitro-status" font-size="8" color="#ff6600"></div>
     <div name="mission-text" font-size="9" font-weight="bold" color="#00ff88"></div>
     <div name="mission-progress" font-size="8" color="#88ffaa"></div>
   </div>

@@ -22,6 +22,9 @@
       <div name="stat-docks" font-size="10" color="#0088ff">Truck Docks: 0</div>
       <div name="stat-jumps" font-size="10" color="#ffff00">Ramp Jumps: 0</div>
       <div name="stat-rain" font-size="10" color="#4488ff">Rain Distance: 0m</div>
+      <div name="stat-closecalls" font-size="10" color="#ff6600">Close Calls: 0</div>
+      <div name="stat-barrels" font-size="10" color="#ff4400">Barrels Exploded: 0</div>
+      <div name="stat-nitros" font-size="10" color="#ff6600">Nitros Used: 0</div>
       <div name="stat-formations" font-size="10" color="#ffaa00">Formations Cleared: 0</div>
     </div>
     <div name="btn-stats-back" font-size="11" color="#ffffff" background-color="#555555" border-radius="10" padding-top="5" padding-bottom="5" padding-left="14" padding-right="14" margin-top="4" cursor="pointer">Back</div>
